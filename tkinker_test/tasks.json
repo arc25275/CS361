@@ -2,15 +2,29 @@
   "tasks": [
     {
       "id": 1,
-      "name": "Task 1",
-      "status": "open",
+      "name": "Milestone 1",
+      "date": "05/03/2024",
+      "attributes": [
+        {"name": "Class","value": "Class 1"},
+        {"name": "Size","value": "XL"}
+      ],
+      "status": "closed",
       "description": "Description for task 1"
     },
     {
       "id": 2,
-      "name": "Task 2",
+      "name": "Finish Prototype",
+      "date": "05/03/2024",
+      "attributes": [
+        {"name": "Class","value": "Class 1"},
+        {"name": "Size","value": "XL"}
+      ],
       "status": "open",
-      "description": "Description for task 2"
+      "description": "Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more. Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more.Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more.Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more.Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more.Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more.Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more.Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more.Description for task 2 that is quite long, with this sentence that I will repeat because I do not want to type too much more."
     }
+  ],
+  "attributes": [
+    {"name": "Class"},
+    {"name": "Size"}
   ]
 }
