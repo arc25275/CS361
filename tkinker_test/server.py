@@ -47,7 +47,26 @@ while True:
             print("Push")
         case "put":
             print("Put")
+            match location:
+                case "tasks":
+                    match spec:
+                        case "all":
+                            response = 400
+                        case spec if spec.isdigit():
+                            task_index = int(spec) - 1
+                            # Get the existing task
+                            server_data["tasks"][task_index].update(incoming_data)
+                            response = 200
+                        case _:
+                            response = 400
+        case "delete":
+            print("Delete")
+        case _:
+            response = 400
 
+    file = open("tasks.json", "w")
+    json.dump(server_data, file, indent=4)
+    file.close()
 
     #  Do some 'work'
     time.sleep(1)
