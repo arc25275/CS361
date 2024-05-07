@@ -10,7 +10,7 @@ socket.bind("tcp://*:5555")
 while True:
     #  Wait for next request from client
     message = str(socket.recv_string())
-    print("Received request: %s" % message)
+    print(f"Received request: {message}")
     message = json.loads(message)
 
     action = message["type"]
@@ -18,8 +18,10 @@ while True:
     path = message["path"]
     path = path.split("/")
     location = path[0]
-    spec = path[1]
-
+    if path != "post":
+        spec = path[1]
+    else:
+        spec = ""
     incoming_data = message["data"]
 
     file = open("tasks.json")
@@ -33,7 +35,6 @@ while True:
                         case "all":
                             response = server_data["tasks"]
                         case spec if spec.isdigit():
-                            print(server_data["tasks"][int(spec)-1])
                             response = server_data["tasks"][int(spec)-1]
                         case _:
                             response = 400
@@ -44,7 +45,16 @@ while True:
                         case spec if spec.isdigit():
                             response = server_data["attributes"][int(spec) - 1]
         case "post":
-            print("Push")
+            print("Post")
+            match location:
+                case "tasks":
+                    server_data["tasks"].append(incoming_data)
+                    response = 200
+                case "attributes":
+                    server_data["attributes"].append(incoming_data)
+                    response = 200
+                case _:
+                    response = 400
         case "put":
             print("Put")
             match location:
@@ -61,6 +71,29 @@ while True:
                             response = 400
         case "delete":
             print("Delete")
+            match location:
+                case "tasks":
+                    match spec:
+                        case "all":
+                            server_data["tasks"] = []
+                            response = 200
+                        case spec if spec.isdigit():
+                            task_index = int(spec) - 1
+                            del server_data["tasks"][task_index]
+                            response = 200
+                        case _:
+                            response = 400
+                case "attributes":
+                    match spec:
+                        case "all":
+                            server_data["attributes"] = []
+                            response = 200
+                        case spec if spec.isdigit():
+                            attribute_index = int(spec) - 1
+                            del server_data["attributes"][attribute_index]
+                            response = 200
+                        case _:
+                            response = 400
         case _:
             response = 400
 

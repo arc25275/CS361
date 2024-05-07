@@ -12,14 +12,22 @@
                 },
                 {
                     "name": "Size",
-                    "value": " XL"
+                    "value": " 1"
+                },
+                {
+                    "name": "Priority",
+                    "value": "Test value"
+                },
+                {
+                    "name": "name",
+                    "value": "value"
                 }
             ],
             "status": "open"
         },
         {
             "id": 2,
-            "name": "Finish Prototype",
+            "name": "Prototype",
             "date": "05/03/2024",
             "description": "No more :)",
             "attributes": [
@@ -29,18 +37,75 @@
                 },
                 {
                     "name": "Size",
-                    "value": " XL"
+                    "value": " 10"
+                },
+                {
+                    "name": "Test",
+                    "value": "Test!"
                 }
             ],
+            "status": "open"
+        },
+        {
+            "id": 3,
+            "name": "New Task",
+            "date": "2024/01/01",
+            "description": "New Description",
+            "attributes": [
+                {
+                    "name": "name",
+                    "value": "value"
+                },
+                {
+                    "name": "Priority",
+                    "value": "value"
+                },
+                {
+                    "name": "name",
+                    "value": "value"
+                }
+            ],
+            "status": "closed"
+        },
+        {
+            "id": 4,
+            "name": "New Task",
+            "date": "2024/01/01",
+            "description": "New Description",
+            "attributes": [],
+            "status": "open"
+        },
+        {
+            "id": 5,
+            "name": "New Task",
+            "date": "2024/01/01",
+            "description": "New Description",
+            "attributes": [],
+            "status": "closed"
+        },
+        {
+            "id": 6,
+            "name": "New Task Name",
+            "date": "2024/01/01",
+            "description": "New Description",
+            "attributes": [],
+            "status": "open"
+        },
+        {
+            "id": 7,
+            "name": "New Task Name",
+            "date": "2024/01/01",
+            "description": "New Description",
+            "attributes": [],
             "status": "open"
         }
     ],
     "attributes": [
         {
-            "name": "Class"
+            "name": "Priority"
         },
         {
-            "name": "Size"
+            "name": "name"
         }
     ]
 }
