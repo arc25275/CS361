@@ -23,7 +23,7 @@ while True:
 
     incoming_data = message["data"]
 
-    file = open("tasks.json")
+    file = open("data.json")
     server_data = json.load(file)
     response = {"code": 200, "message": "", "data": None}
     match action:
@@ -125,7 +125,7 @@ while True:
             response["message"] = "Not Found"
         case 405:
             response["message"] = "Method Not Allowed"
-    file = open("tasks.json", "w")
+    file = open("data.json", "w")
     json.dump(server_data, file, indent=4)
     file.close()
     #  Send reply back to client

@@ -10,7 +10,7 @@ import argparse
 
 
 class CustomFormatter(logging.Formatter):
-    """TODO:Custom logging formatter"""
+    """Custom formatter for logging. Will color code based on level of logging"""
     grey = "\x1b[38;20m"
     blue = "\x1b[36m"
     yellow = "\x1b[33;20m"
@@ -34,7 +34,7 @@ class CustomFormatter(logging.Formatter):
 
 
 class LoggingHandler:
-    """TODO:Logging Handler for classes"""
+    """A class to handle logging for all classes that inherit from it. Will set up logging for each class"""
     def __init__(self, *args, **kwargs):
         # Be able to enable debug if needed
         parser = argparse.ArgumentParser()
@@ -42,7 +42,11 @@ class LoggingHandler:
                             help='Enable debug logging', action='store_true')
         args = parser.parse_args()
         # Set up formatter and logger
+
         self.log = logging.getLogger(self.__class__.__name__)
+        if self.log.hasHandlers():
+            self.log.handlers.clear()
+        self.log.propagate = False
         # create console handler with a higher log level
         ch = logging.StreamHandler(stream=sys.stdout)
         if args.debug:
@@ -123,8 +127,8 @@ class Attribute(AttributeRecord):
         self.value: str = value
         self.task: Task = task
         self.UI: dict = {
-            "label": self.build_label(self.task.UI["detail_view"]) if self.task is not None else None,
-            "option": self.build_current_option(self.task.UI["detail_view"]) if self.task is not None else None
+            "label": self.build_label(self.task.UI["detail_view"]["frame"]) if self.task is not None else None,
+            "option": self.build_current_option(self.task.UI["detail_view"]["frame"]) if self.task is not None else None
         }
         self.log.info(f"Attribute created: {self}")
 
@@ -339,7 +343,101 @@ class Task(LoggingHandler):
 
     def build_detail_view(self, parent):
         """TODO:Build task detail view"""
-        pass
+
+        # TODO MOVE TO CLIENT extra_space.tkraise()
+
+        # Create a new frame for the task detail view and add it to the list
+        task_detail_frame = ctk.CTkFrame(parent, bg_color="gray14", fg_color="gray14", height=800)
+
+        task_detail_frame.columnconfigure(index=0, weight=1, uniform="column")
+        task_detail_frame.columnconfigure(index=1, weight=1)
+        task_detail_frame.columnconfigure(index=2, weight=1, uniform="column")
+        task_detail_frame.rowconfigure(index=0, weight=1)
+        task_detail_frame.rowconfigure(index=1, weight=1)
+
+        # Name Frame
+        name_frame = ctk.CTkFrame(task_detail_frame, bg_color="gray14", fg_color="gray14")
+        name_frame.grid(row=0, column=0, sticky="nsw")
+        name_frame.columnconfigure(0, weight=1)
+        name_frame.columnconfigure(1, weight=1)
+
+        # Name Label
+        name_label = ctk.CTkLabel(name_frame, text=f'Task {self.id} - ', font=("Arial", 30))
+
+        # Name Textbox
+        task_name = ctk.CTkTextbox(name_frame, font=("Arial", 30), border_width=0,
+                                   height=1, width=300, fg_color="gray14", wrap="none")
+        task_name.insert('1.0', f'{self.name}')
+        task_name.configure(state="disabled")
+        task_name.grid(row=0, column=1, sticky="nsw", pady=10)
+
+        name_label.grid(row=0, column=0, sticky="nsw", padx=(10, 0))
+
+        # Completion Checkbox
+        complete_frame = ctk.CTkFrame(task_detail_frame, fg_color="gray14", width=100)
+        complete_text = ctk.CTkLabel(complete_frame, text="Complete ", font=("Arial", 30))
+        task_var = ctk.BooleanVar(value=True if self.status == "closed" else False)
+        complete_box = ctk.CTkCheckBox(complete_frame, variable=task_var,
+                                       command=lambda: toggle_active(self.id),
+                                       text="",
+                                       checkbox_width=30,
+                                       checkbox_height=30)
+        complete_text.grid(column=0, row=0, sticky="nsew", pady=10)
+        complete_box.grid(column=1, row=0, sticky="nsew")
+        complete_frame.grid(column=1, row=0, sticky="nsw", pady=10, padx=10)
+
+        # Editing Button
+        edit_button = ctk.CTkButton(task_detail_frame, text="Edit", command=lambda: edit_task(self.id),
+                                    font=("Arial", 30), width=80, bg_color="gray20")
+        edit_button.grid(column=2, row=0, sticky="nsw", pady=10)
+
+        # Date
+        date = ctk.CTkTextbox(task_detail_frame, font=("Arial", 30), border_width=0, height=1,
+                              width=175,
+                              fg_color="gray20", wrap="none")
+        date.insert('1.0', self.date)
+        date.configure(state="disabled")
+        date.grid(row=1, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
+
+        # Attribute Label
+        attribute_label = ctk.CTkButton(task_detail_frame, text="Attributes", font=("Arial", 30), command=lambda: self.client.open_attribute_options(self.id), state="disabled", bg_color="gray14", fg_color="gray14")
+        attribute_label.grid(row=2, column=0, columnspan=3, sticky="nsw", pady=10, padx=15)
+        # Attributes
+        max_j = 0
+        for j, attr in enumerate(self.attributes):
+            attr.UI["label"].grid(row=3 + j, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+            task_detail_frame.rowconfigure(index=3 + j, weight=1, uniform="row")
+            max_j = j
+
+        # Description Label
+        description_label = ctk.CTkLabel(task_detail_frame, text="Description", font=("Arial", 30), padx=15)
+        description_label.grid(row=max_j + 4, column=0, columnspan=3, sticky="nsw")
+        # Description
+        description = ctk.CTkTextbox(task_detail_frame, font=("Arial", 20), padx=15, wrap='word', width=800,
+                                     height=300, spacing2=10)
+        description.insert('1.0', self.description)
+        description.configure(state="disabled")
+        description.grid(row=max_j + 5, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
+
+        # Create a Scrollbar and attach it to the Text widget
+        scrollbar = ctk.CTkScrollbar(task_detail_frame, command=description.yview)
+        scrollbar.grid(row=max_j + 5, column=3, sticky='nsew')
+        description['yscrollcommand'] = scrollbar.set
+
+        task_detail_frame.rowconfigure(index=max_j + 4, weight=1)
+        task_detail_frame.rowconfigure(index=max_j + 5, weight=1)
+
+        task_detail_frame.grid(row=1, column=1, columnspan=3, sticky='new')
+        self.log.debug(f"Task detail view built: {task_detail_frame}")
+        return {
+            "name": task_name,
+            "date": date,
+            "description": description,
+            "complete": task_var,
+            "edit": edit_button,
+            "attributes": attribute_label,
+            "frame": task_detail_frame
+        }
 
     def build_attribute_options(self, parent):
         """TODO:Build attribute options for task. Hide below task details"""
@@ -419,51 +517,261 @@ class Task(LoggingHandler):
             self.log.error(f"Error updating attribute in task {self.id}: {attribute}")
 
 
+# Scrolling events
+def scroll(event, widget):
+    widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+
+def final_scroll(event, widget, func):
+    widget.bind_all("<MouseWheel>", func)
+
+
+def stop_scroll(event, widget):
+    widget.unbind_all("<MouseWheel>")
+
 
 class Client(LoggingHandler):
     """TODO CLIENT DOCSTRING"""
 
     def __init__(self, connection, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.root = ctk.CTk()
+        self.root = self.build_root(ctk.CTk())
         self.tasks: list[Task] = []
         self.attribute_records: list[AttributeRecord] = []
         self.connection: Connection = connection
         self.UI = {
             "root": self.root,
-            "task_container": None,
-            "detail_container": None,
-            "help_page": None,
+            "menu_bar": self.build_menu(),
+            "task_container": self.build_task_list_container(),
+            "detail_container": self.build_detail_container(),
         }
+        self.log.info("Client created")
+        self.build_initial_ui()
+
 
     # Build default UI
     def build_initial_ui(self):
         """TODO:Build containers, task list, details, and help page"""
-        pass
+        self.fetch_tasks()
+        self.fetch_attributes()
+        self.build_task_list()
+        self.build_task_details()
+        self.UI["help_page"] = self.build_help_page()
+        self.log.info("Initial UI built")
+        self.root.update()
+        self.root.mainloop()
 
     def build_menu(self):
-        """TODO:Build menu bar"""
-        pass
+        """Create the menu bar and buttons on it.
+        :return: tk Object for menu bar and all buttons.
+        """
+        # Add menu
+        menu_bar = ctk.CTkFrame(self.root)
+        menu_bar.grid(row=0, column=0, columnspan=4, sticky='nsew')
 
-    def build_task_container(self):
-        """TODO:Build container for task list. Add scrollable canvas"""
-        pass
+        # Sort & Filter
+        sorting_button = ctk.CTkButton(menu_bar, text="Sort and Filter", font=("Arial", 20), width=40, height=20)
+        sorting_button.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
+
+        # Add
+        add_task_button = ctk.CTkButton(menu_bar, text="Add Task", font=("Arial", 20), width=20, height=20,
+                                        command=self.add_task)
+        add_task_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
+
+        # Help Button
+        help_button = ctk.CTkButton(menu_bar, text="What's New? / Help", font=("Arial", 20), width=20, height=20,
+                                    command=self.toggle_help)
+        help_button.grid(row=0, column=4, sticky="nsew", pady=10, padx=10)
+
+        # Config menu bar grid
+        menu_bar.columnconfigure(0, weight=1)
+        menu_bar.columnconfigure(1, weight=1)
+        menu_bar.columnconfigure(2, weight=4)
+        menu_bar.columnconfigure(3, weight=4)
+        menu_bar.columnconfigure(4, weight=1)
+
+        return {
+            "menu_bar": menu_bar,
+            "sort": sorting_button,
+            "add": add_task_button,
+            "help": help_button
+        }
+
+    def build_root(self, root: ctk.CTk):
+        """Build the root window for the application"""
+        root.configure(background="gray14")
+        root.geometry('1200x800')
+        # Adding columns and rows
+        root.columnconfigure(0, weight=1)
+        root.columnconfigure(1, weight=50)
+        root.rowconfigure(0, weight=1)
+        root.rowconfigure(1, weight=20)
+        return root
+
+    def build_task_list_container(self):
+        """Build a scrollable container for the task list
+        :return: The container for the task list
+        """
+        # tkLayout
+        #  task_container
+        #  > left_canvas
+        #    > task_list_container
+        #  > left_scrollbar
+
+        task_container = ctk.CTkFrame(self.root)
+        task_container.grid(row=1, column=0, sticky='nsew')
+        task_container.columnconfigure(0, weight=1)
+        task_container.rowconfigure(0, weight=1)
+
+        # Create a canvas so that it can be scrollable
+        left_canvas = ctk.CTkCanvas(task_container, bg="gray14", highlightthickness=0)
+        left_canvas.grid(row=0, column=0, sticky='nsew')
+
+        left_scrollbar = ctk.CTkScrollbar(task_container, orientation='vertical', command=left_canvas.yview)
+        left_scrollbar.grid(row=0, column=1, sticky='nsew')
+
+        left_canvas['yscrollcommand'] = left_scrollbar.set
+        left_canvas['yscrollincrement'] = 30
+        left_canvas.columnconfigure(0, weight=1)
+        left_canvas.rowconfigure(0, weight=1)
+
+        task_list_container = ctk.CTkFrame(left_canvas)
+        left_canvas.create_window((0, 0), window=task_list_container, anchor='nw', tags='expand1')
+        task_list_container.columnconfigure(0, weight=1)
+
+        left_canvas.bind('<Configure>', lambda event: left_canvas.itemconfigure('expand1', width=event.width))
+        task_list_container.update_idletasks()
+        left_canvas.config(scrollregion=left_canvas.bbox('all'))
+
+        def update_scrollregion_left(event):
+            left_canvas.configure(scrollregion=left_canvas.bbox('all'))
+
+        task_list_container.bind('<Configure>', update_scrollregion_left)
+
+        left_canvas.bind("<Enter>",
+                         lambda event: final_scroll(event, left_canvas, lambda event: scroll(event, left_canvas)))
+        left_canvas.bind("<Leave>", lambda event: stop_scroll(event, left_canvas))
+        self.log.debug(f"Task list container built: {task_container}")
+        return task_list_container
 
     def build_detail_container(self):
-        """TODO:Build container for task details"""
-        pass
+        """Build a scrollable container for the task details
+        :return: The container for the task details
+        """
+        detail_container = ctk.CTkFrame(self.root, bg_color="gray14", fg_color="gray14")
+        detail_container.grid(row=1, column=1, sticky='nsew')
+        detail_container.columnconfigure(0, weight=1)
+        detail_container.rowconfigure(0, weight=1)
 
-    def build_help_page(self):
-        """TODO:Build help page"""
+        # Create a canvas so that it can be scrollable
+        right_canvas = ctk.CTkCanvas(detail_container, bg="gray14", highlightthickness=0)
+        right_canvas.grid(row=0, column=0, sticky='nsew')
+
+        right_scrollbar = ctk.CTkScrollbar(detail_container, orientation='vertical', command=right_canvas.yview)
+        right_scrollbar.grid(row=0, column=1, sticky='nsew')
+
+        right_canvas['yscrollcommand'] = right_scrollbar.set
+        right_canvas['yscrollincrement'] = 30
+        right_canvas.columnconfigure(0, weight=1)
+        right_canvas.rowconfigure(0, weight=1)
+
+        task_detail_container = ctk.CTkFrame(right_canvas)
+        right_canvas.create_window((0, 0), window=task_detail_container, anchor='nw', tags='expand')
+        task_detail_container.columnconfigure(0, weight=1)
+
+        def update_scrollregion_right(event):
+            right_canvas.configure(scrollregion=right_canvas.bbox('all'))
+
+        task_detail_container.bind('<Configure>', update_scrollregion_right)
+
+        right_canvas.bind('<Configure>', lambda event: right_canvas.itemconfigure('expand', width=event.width))
+        task_detail_container.update_idletasks()
+        right_canvas.config(scrollregion=right_canvas.bbox('all'))
+
+        right_canvas.bind("<Enter>",
+                          lambda event: final_scroll(event, right_canvas, lambda event: scroll(event, right_canvas)))
+        right_canvas.bind("<Leave>", lambda event: stop_scroll(event, right_canvas))
+        self.log.debug(f"Detail container built: {detail_container}")
+
+        extra_space = ctk.CTkLabel(task_detail_container, text="", bg_color="gray14", fg_color="gray14", height=500)
+        extra_space.grid(row=0, rowspan=3, column=0, columnspan=4, sticky="nsew")
+
+        return task_detail_container
+
+    def build_help_page(self) -> ctk.CTkFrame:
+        """Build the help page for the application. It has two parts, one for new features, and one for help."""
         # Move text to file
-        pass
+        help_page = ctk.CTkFrame(self.UI["detail_container"], bg_color="gray14", fg_color="gray14")
+        help_page.grid(row=1, column=0, columnspan=4, sticky='nsew')
+        help_page.columnconfigure(0, weight=1)
+        help_page.rowconfigure(0, weight=1)
+        help_page.rowconfigure(1, weight=2)
+        help_page.rowconfigure(2, weight=1)
+        help_page.rowconfigure(3, weight=2)
+
+        info_text = '''View
+        - You are now able to view all of your tasks on the main page, 
+          and you can click on a task to show more of its details
+        Add
+        - You are now able to add more tasks, from a button on the main page.
+        - When adding a task, the parts you need to fill out are highlighted in blue.
+        - If you want, you can add attributes to your tasks to better categorize them.
+        Edit
+        - You are now able to edit tasks, and change change any of the details that 
+          you added originally, like attributes, or the date.'''
+
+        help_text = '''Viewing
+        - To view a task, click on the task in the list on the left.
+        - The task details will appear on the right.
+        - If you want to see more tasks, you can scroll through the list on the left.
+        Adding
+        - To add a task, click the "Add Task" button on the main page.
+        - Fill out the name, date, and description of the task.
+        - If you want, you can add attributes to your task to better categorize it.
+        - Attributes can be things like "Urgency", "Importance", or "Type".
+        - To add an attribute, click the "Attributes" button on the task detail view.
+        - You can add new attributes, or existing ones in other tasks.
+        Editing
+        - To edit a task, click the "Edit" button on the task detail view.
+        - You can change the name, date, description, and attributes of the task.
+        - To edit an attribute, click the "Attributes" button on the task detail view.
+        - You can change the value of the attribute.
+        - To remove an attribute, click the "Remove" button next to the attribute.
+        - To add an attribute, click the "Add" button next to the attribute, which can be an existing one, or brand new.
+        - To save your changes, click the "Save" button on the task detail view.
+        '''
+
+        # New Info
+        new_title = ctk.CTkLabel(help_page, text="What's New?", font=("Arial", 30), bg_color="gray14",
+                                 fg_color="gray14",
+                                 height=2)
+        new_title.grid(row=0, column=0, sticky="nsw", padx=10, pady=10)
+        new_info = ctk.CTkTextbox(help_page, font=("Arial", 20), bg_color="gray14", fg_color="gray14",
+                                  width=700, spacing1=10, height=400, activate_scrollbars=False)
+        new_info.insert('1.0', info_text)
+        new_info.configure(state="disabled")
+        new_info.grid(row=1, column=0, sticky="nsw", padx=10)
+        # Help
+        help_title = ctk.CTkLabel(help_page, text="Help", font=("Arial", 30), bg_color="gray14", fg_color="gray14",
+                                  height=2)
+        help_title.grid(row=2, column=0, sticky="nsw", padx=10, pady=10)
+        help_info = ctk.CTkTextbox(help_page, font=("Arial", 20), bg_color="gray14", fg_color="gray14",
+                                   width=700, spacing1=10, height=1000, activate_scrollbars=False)
+        help_info.insert('1.0', help_text)
+        help_info.configure(state="disabled")
+        help_info.grid(row=3, column=0, sticky="nsw", padx=10)
+        self.log.debug(f"Help page built: {help_page}")
+        return help_page
 
     def build_task_list(self):
-        """TODO:Build task list for each task"""
-        pass
+        """TODO:Build task list for each task. WIP RIGHT NOW"""
+        for i, task in enumerate(self.tasks):
+            task.UI["list_item"]["button"].grid(row=i, column=0, sticky="nsw", pady=10, padx=10)
+            self.UI["task_container"].rowconfigure(i, weight=1, uniform="row")
+        self.log.info(f"Built {len(self.tasks)} tasks in task list")
 
     def build_task_details(self):
-        """TODO:Build task details for each task"""
+        """TODO:Grid task details for each task"""
         pass
 
     def open_attribute_options(self, n):
@@ -472,12 +780,38 @@ class Client(LoggingHandler):
 
     # Updating Data
     def fetch_tasks(self):
-        """TODO:Fetch tasks from server"""
-        pass
+        """Fetch all tasks from the server
+        :return: True if successful, False if not
+        """
+        response = self.connection.get("tasks/all")
+        if response["code"] == 200:
+            for task in response["data"]:
+                new_task = Task(self, task["id"], task["name"], task["date"], task["description"], task["status"])
+                for attr in task["attributes"]:
+                    new_attribute = Attribute(self, attr["id"], attr["name"], attr["value"], new_task)
+                    new_task.attributes.append(new_attribute)
+                self.tasks.append(new_task)
+            self.log.info(f"Fetched {len(self.tasks)} tasks from server")
+            return True
+        else:
+            self.log.error(f"Error fetching tasks: {response["code"]} : {response["message"]}")
+            return False
 
-    def fetch_attributes(self):
-        """TODO:Fetch attributes from server"""
-        pass
+    def fetch_attributes(self) -> bool:
+        """Fetch all attributes from the server
+        :return: True if successful, False if not
+        """
+        response = self.connection.get("attributes/all")
+        if response["code"] == 200:
+            for attr in response["data"]:
+                new_attribute = AttributeRecord(self, attr["id"], attr["name"])
+                self.attribute_records.append(new_attribute)
+            self.log.info(f"Fetched {len(self.attribute_records)} attribute records from server")
+            return True
+        else:
+            self.log.error(f"Error fetching attributes: {response["code"]} : {response["message"]}")
+            return False
+
 
     # Updating UI
     def update_list(self):
@@ -607,198 +941,198 @@ socket = context.socket(zmq.REQ)
 socket.connect("tcp://localhost:5555")
 
 # UI Setup and Shape
-root = ctk.CTk()
-root.configure(background="gray14")
-root.geometry('1200x800')
-# Adding columns and rows
-root.columnconfigure(0, weight=1)
-root.columnconfigure(1, weight=50)
-root.rowconfigure(0, weight=1)
-root.rowconfigure(1, weight=20)
+# root = ctk.CTk()
+# root.configure(background="gray14")
+# root.geometry('1200x800')
+# # Adding columns and rows
+# root.columnconfigure(0, weight=1)
+# root.columnconfigure(1, weight=50)
+# root.rowconfigure(0, weight=1)
+# root.rowconfigure(1, weight=20)
 
 # Add container for tasks in left column
-task_container = ctk.CTkFrame(root)
-task_container.grid(row=1, column=0, sticky='nsew')
-task_container.columnconfigure(0, weight=1)
-task_container.rowconfigure(0, weight=1)
-# Create a canvas that can be scrollable
-left_canvas = ctk.CTkCanvas(task_container, bg="gray14", highlightthickness=0)
-left_canvas.grid(row=0, column=0, sticky='nsew')
-left_scrollbar = ctk.CTkScrollbar(task_container, orientation='vertical', command=left_canvas.yview)
-left_scrollbar.grid(row=0, column=1, sticky='nsew')
-left_canvas['yscrollcommand'] = left_scrollbar.set
-left_canvas['yscrollincrement'] = 30
-left_canvas.columnconfigure(0, weight=1)
-left_canvas.rowconfigure(0, weight=1)
-left_final_window = ctk.CTkFrame(left_canvas)
-left_canvas.create_window((0, 0), window=left_final_window, anchor='nw', tags='expand1')
-left_final_window.columnconfigure(0, weight=1)
-
-left_canvas.bind('<Configure>', lambda event: left_canvas.itemconfigure('expand1', width=event.width))
-left_final_window.update_idletasks()
-left_canvas.config(scrollregion=left_canvas.bbox('all'))
-
-
-def update_scrollregion_left(event):
-    left_canvas.configure(scrollregion=left_canvas.bbox('all'))
-
-
-left_final_window.bind('<Configure>', update_scrollregion_left)
+# task_container = ctk.CTkFrame(root)
+# task_container.grid(row=1, column=0, sticky='nsew')
+# task_container.columnconfigure(0, weight=1)
+# task_container.rowconfigure(0, weight=1)
+# # Create a canvas that can be scrollable
+# left_canvas = ctk.CTkCanvas(task_container, bg="gray14", highlightthickness=0)
+# left_canvas.grid(row=0, column=0, sticky='nsew')
+# left_scrollbar = ctk.CTkScrollbar(task_container, orientation='vertical', command=left_canvas.yview)
+# left_scrollbar.grid(row=0, column=1, sticky='nsew')
+# left_canvas['yscrollcommand'] = left_scrollbar.set
+# left_canvas['yscrollincrement'] = 30
+# left_canvas.columnconfigure(0, weight=1)
+# left_canvas.rowconfigure(0, weight=1)
+# left_final_window = ctk.CTkFrame(left_canvas)
+# left_canvas.create_window((0, 0), window=left_final_window, anchor='nw', tags='expand1')
+# left_final_window.columnconfigure(0, weight=1)
+#
+# left_canvas.bind('<Configure>', lambda event: left_canvas.itemconfigure('expand1', width=event.width))
+# left_final_window.update_idletasks()
+# left_canvas.config(scrollregion=left_canvas.bbox('all'))
+#
+#
+# def update_scrollregion_left(event):
+#     left_canvas.configure(scrollregion=left_canvas.bbox('all'))
+#
+#
+# left_final_window.bind('<Configure>', update_scrollregion_left)
 
 # Add ability to scroll
 
 
 # Creating details panel
-right_container = ctk.CTkFrame(root, bg_color="gray14", fg_color="gray14")
-right_container.grid(row=1, column=1, sticky='nsew')
-right_container.columnconfigure(0, weight=1)
-right_container.rowconfigure(0, weight=1)
-
-right_canvas = ctk.CTkCanvas(right_container, bg="gray14", highlightthickness=0)
-right_canvas.grid(row=0, column=0, sticky='nsew')
-
-right_scrollbar = ctk.CTkScrollbar(right_container, orientation='vertical', command=right_canvas.yview)
-right_scrollbar.grid(row=0, column=1, sticky='nsew')
-right_canvas['yscrollcommand'] = right_scrollbar.set
-right_canvas['yscrollincrement'] = 30
-right_canvas.columnconfigure(0, weight=1)
-right_canvas.rowconfigure(0, weight=1)
-right_final_window = ctk.CTkFrame(right_canvas)
-right_canvas.create_window((0, 0), window=right_final_window, anchor='nw', tags='expand')
-right_final_window.columnconfigure(0, weight=1)
-
-right_canvas.bind('<Configure>', lambda event: right_canvas.itemconfigure('expand', width=event.width))
-right_final_window.update_idletasks()
-right_canvas.config(scrollregion=right_canvas.bbox('all'))
-
-
-def update_scrollregion_right(event):
-    right_canvas.configure(scrollregion=right_canvas.bbox('all'))
+# right_container = ctk.CTkFrame(root, bg_color="gray14", fg_color="gray14")
+# right_container.grid(row=1, column=1, sticky='nsew')
+# right_container.columnconfigure(0, weight=1)
+# right_container.rowconfigure(0, weight=1)
+#
+# right_canvas = ctk.CTkCanvas(right_container, bg="gray14", highlightthickness=0)
+# right_canvas.grid(row=0, column=0, sticky='nsew')
+#
+# right_scrollbar = ctk.CTkScrollbar(right_container, orientation='vertical', command=right_canvas.yview)
+# right_scrollbar.grid(row=0, column=1, sticky='nsew')
+# right_canvas['yscrollcommand'] = right_scrollbar.set
+# right_canvas['yscrollincrement'] = 30
+# right_canvas.columnconfigure(0, weight=1)
+# right_canvas.rowconfigure(0, weight=1)
+# right_final_window = ctk.CTkFrame(right_canvas)
+# right_canvas.create_window((0, 0), window=right_final_window, anchor='nw', tags='expand')
+# right_final_window.columnconfigure(0, weight=1)
+#
+# right_canvas.bind('<Configure>', lambda event: right_canvas.itemconfigure('expand', width=event.width))
+# right_final_window.update_idletasks()
+# right_canvas.config(scrollregion=right_canvas.bbox('all'))
 
 
-right_final_window.bind('<Configure>', update_scrollregion_right)
+# def update_scrollregion_right(event):
+#     right_canvas.configure(scrollregion=right_canvas.bbox('all'))
+#
+#
+# right_final_window.bind('<Configure>', update_scrollregion_right)
 
 
-def scroll(event, widget):
-    widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-
-def final_scroll(event, widget, func):
-    widget.bind_all("<MouseWheel>", func)
-
-
-def stop_scroll(event, widget):
-    widget.unbind_all("<MouseWheel>")
+# def scroll(event, widget):
+#     widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+#
+#
+# def final_scroll(event, widget, func):
+#     widget.bind_all("<MouseWheel>", func)
+#
+#
+# def stop_scroll(event, widget):
+#     widget.unbind_all("<MouseWheel>")
 
 
 # Make sure scrolling happens in the right place
-left_canvas.bind("<Enter>", lambda event: final_scroll(event, left_canvas, lambda event: scroll(event, left_canvas)))
-left_canvas.bind("<Leave>", lambda event: stop_scroll(event, left_canvas))
-
-right_canvas.bind("<Enter>", lambda event: final_scroll(event, right_canvas, lambda event: scroll(event, right_canvas)))
-right_canvas.bind("<Leave>", lambda event: stop_scroll(event, right_canvas))
-
-
-def fetch_tasks():
-    # Get Tasks
-    payload = {
-        "type": "get",
-        "path": "tasks/all",
-        "data": ""
-    }
-    socket.send_string(json.dumps(payload))
-
-    response = json.loads(socket.recv_string())
-    print(f"Fetching tasks gave response: {response}")
-
-    if response["response"] == 400:
-        print("Server Error")
-        tasks = []
-    else:
-        tasks = response["response"]
-    return tasks
+# left_canvas.bind("<Enter>", lambda event: final_scroll(event, left_canvas, lambda event: scroll(event, left_canvas)))
+# left_canvas.bind("<Leave>", lambda event: stop_scroll(event, left_canvas))
+#
+# right_canvas.bind("<Enter>", lambda event: final_scroll(event, right_canvas, lambda event: scroll(event, right_canvas)))
+# right_canvas.bind("<Leave>", lambda event: stop_scroll(event, right_canvas))
 
 
-def fetch_attributes():
-    payload = {
-        "type": "get",
-        "path": "attributes/all",
-        "data": ""
-    }
-    socket.send_string(json.dumps(payload))
+# def fetch_tasks():
+#     # Get Tasks
+#     payload = {
+#         "type": "get",
+#         "path": "tasks/all",
+#         "data": ""
+#     }
+#     socket.send_string(json.dumps(payload))
+#
+#     response = json.loads(socket.recv_string())
+#     print(f"Fetching tasks gave response: {response}")
+#
+#     if response["response"] == 400:
+#         print("Server Error")
+#         tasks = []
+#     else:
+#         tasks = response["response"]
+#     return tasks
+#
+#
+# def fetch_attributes():
+#     payload = {
+#         "type": "get",
+#         "path": "attributes/all",
+#         "data": ""
+#     }
+#     socket.send_string(json.dumps(payload))
+#
+#     response = json.loads(socket.recv_string())
+#     print(f"Fetching attributes gave response: {response}")
+#
+#     if response["response"] == 400:
+#         print("Server Error")
+#         attributes = []
+#     else:
+#         attributes = response["response"]
+#     return attributes
 
-    response = json.loads(socket.recv_string())
-    print(f"Fetching attributes gave response: {response}")
 
-    if response["response"] == 400:
-        print("Server Error")
-        attributes = []
-    else:
-        attributes = response["response"]
-    return attributes
-
-
-tasks = fetch_tasks()
-attribute_list = fetch_attributes()
+# tasks = fetch_tasks()
+# attribute_list = fetch_attributes()
 
 # Help Page
-help_page = ctk.CTkFrame(right_final_window, bg_color="gray14", fg_color="gray14")
-help_page.grid(row=1, column=0, columnspan=4, sticky='nsew')
-help_page.columnconfigure(0, weight=1)
-help_page.rowconfigure(0, weight=1)
-help_page.rowconfigure(1, weight=2)
-help_page.rowconfigure(2, weight=1)
-help_page.rowconfigure(3, weight=2)
-
-info_text = '''View
-- You are now able to view all of your tasks on the main page, 
-  and you can click on a task to show more of its details
-Add
-- You are now able to add more tasks, from a button on the main page.
-- When adding a task, the parts you need to fill out are highlighted in blue.
-- If you want, you can add attributes to your tasks to better categorize them.
-Edit
-- You are now able to edit tasks, and change change any of the details that 
-  you added originally, like attributes, or the date.'''
-
-help_text = '''Viewing
-- To view a task, click on the task in the list on the left.
-- The task details will appear on the right.
-- If you want to see more tasks, you can scroll through the list on the left.
-Adding
-- To add a task, click the "Add Task" button on the main page.
-- Fill out the name, date, and description of the task.
-- If you want, you can add attributes to your task to better categorize it.
-- Attributes can be things like "Urgency", "Importance", or "Type".
-- To add an attribute, click the "Attributes" button on the task detail view.
-- You can add new attributes, or existing ones in other tasks.
-Editing
-- To edit a task, click the "Edit" button on the task detail view.
-- You can change the name, date, description, and attributes of the task.
-- To edit an attribute, click the "Attributes" button on the task detail view.
-- You can change the value of the attribute.
-- To remove an attribute, click the "Remove" button next to the attribute.
-- To add an attribute, click the "Add" button next to the attribute, which can be an existing one, or brand new.
-- To save your changes, click the "Save" button on the task detail view.
-'''
-
-# New Info
-new_title = ctk.CTkLabel(help_page, text="What's New?", font=("Arial", 30), bg_color="gray14", fg_color="gray14",
-                         height=2)
-new_title.grid(row=0, column=0, sticky="nsw", padx=10, pady=10)
-new_info = ctk.CTkTextbox(help_page, font=("Arial", 20), bg_color="gray14", fg_color="gray14",
-                          width=700, spacing1=10, height=400, activate_scrollbars=False)
-new_info.insert('1.0', info_text)
-new_info.configure(state="disabled")
-new_info.grid(row=1, column=0, sticky="nsw", padx=10)
-# Help
-help_title = ctk.CTkLabel(help_page, text="Help", font=("Arial", 30), bg_color="gray14", fg_color="gray14", height=2)
-help_title.grid(row=2, column=0, sticky="nsw", padx=10, pady=10)
-help_info = ctk.CTkTextbox(help_page, font=("Arial", 20), bg_color="gray14", fg_color="gray14",
-                           width=700, spacing1=10, height=1000, activate_scrollbars=False)
-help_info.insert('1.0', help_text)
-help_info.configure(state="disabled")
-help_info.grid(row=3, column=0, sticky="nsw", padx=10)
+# help_page = ctk.CTkFrame(right_final_window, bg_color="gray14", fg_color="gray14")
+# help_page.grid(row=1, column=0, columnspan=4, sticky='nsew')
+# help_page.columnconfigure(0, weight=1)
+# help_page.rowconfigure(0, weight=1)
+# help_page.rowconfigure(1, weight=2)
+# help_page.rowconfigure(2, weight=1)
+# help_page.rowconfigure(3, weight=2)
+#
+# info_text = '''View
+# - You are now able to view all of your tasks on the main page,
+#   and you can click on a task to show more of its details
+# Add
+# - You are now able to add more tasks, from a button on the main page.
+# - When adding a task, the parts you need to fill out are highlighted in blue.
+# - If you want, you can add attributes to your tasks to better categorize them.
+# Edit
+# - You are now able to edit tasks, and change change any of the details that
+#   you added originally, like attributes, or the date.'''
+#
+# help_text = '''Viewing
+# - To view a task, click on the task in the list on the left.
+# - The task details will appear on the right.
+# - If you want to see more tasks, you can scroll through the list on the left.
+# Adding
+# - To add a task, click the "Add Task" button on the main page.
+# - Fill out the name, date, and description of the task.
+# - If you want, you can add attributes to your task to better categorize it.
+# - Attributes can be things like "Urgency", "Importance", or "Type".
+# - To add an attribute, click the "Attributes" button on the task detail view.
+# - You can add new attributes, or existing ones in other tasks.
+# Editing
+# - To edit a task, click the "Edit" button on the task detail view.
+# - You can change the name, date, description, and attributes of the task.
+# - To edit an attribute, click the "Attributes" button on the task detail view.
+# - You can change the value of the attribute.
+# - To remove an attribute, click the "Remove" button next to the attribute.
+# - To add an attribute, click the "Add" button next to the attribute, which can be an existing one, or brand new.
+# - To save your changes, click the "Save" button on the task detail view.
+# '''
+#
+# # New Info
+# new_title = ctk.CTkLabel(help_page, text="What's New?", font=("Arial", 30), bg_color="gray14", fg_color="gray14",
+#                          height=2)
+# new_title.grid(row=0, column=0, sticky="nsw", padx=10, pady=10)
+# new_info = ctk.CTkTextbox(help_page, font=("Arial", 20), bg_color="gray14", fg_color="gray14",
+#                           width=700, spacing1=10, height=400, activate_scrollbars=False)
+# new_info.insert('1.0', info_text)
+# new_info.configure(state="disabled")
+# new_info.grid(row=1, column=0, sticky="nsw", padx=10)
+# # Help
+# help_title = ctk.CTkLabel(help_page, text="Help", font=("Arial", 30), bg_color="gray14", fg_color="gray14", height=2)
+# help_title.grid(row=2, column=0, sticky="nsw", padx=10, pady=10)
+# help_info = ctk.CTkTextbox(help_page, font=("Arial", 20), bg_color="gray14", fg_color="gray14",
+#                            width=700, spacing1=10, height=1000, activate_scrollbars=False)
+# help_info.insert('1.0', help_text)
+# help_info.configure(state="disabled")
+# help_info.grid(row=3, column=0, sticky="nsw", padx=10)
 
 # Create a dictionary to store the state of each textbox
 
@@ -1025,111 +1359,111 @@ def remove_attribute(n, index):
 
 task_detail_frames = []
 
-extra_space = ctk.CTkLabel(right_final_window, text="", bg_color="gray14", fg_color="gray14", height=500)
-extra_space.grid(row=0, rowspan=3, column=0, columnspan=4, sticky="nsew")
+# extra_space = ctk.CTkLabel(right_final_window, text="", bg_color="gray14", fg_color="gray14", height=500)
+# extra_space.grid(row=0, rowspan=3, column=0, columnspan=4, sticky="nsew")
 
 
-def build_task_details():
-    print("Building Task Details")
-    extra_space.tkraise()
-    for i in range(len(tasks)):
-        # Create a new frame for the task detail view and add it to the list
-        task_detail_frame = ctk.CTkFrame(right_final_window, bg_color="gray14", fg_color="gray14", height=800)
-
-        task_detail_frame.columnconfigure(index=0, weight=1, uniform="column")
-        task_detail_frame.columnconfigure(index=1, weight=1)
-        task_detail_frame.columnconfigure(index=2, weight=1, uniform="column")
-        task_detail_frame.rowconfigure(index=0, weight=1)
-        task_detail_frame.rowconfigure(index=1, weight=1)
-
-        # Name Frame
-        name_frame = ctk.CTkFrame(task_detail_frame, bg_color="gray14", fg_color="gray14")
-        name_frame.grid(row=0, column=0, sticky="nsw")
-        name_frame.columnconfigure(0, weight=1)
-        name_frame.columnconfigure(1, weight=1)
-
-        # Name Label
-        name_label = ctk.CTkLabel(name_frame, text=f'Task {tasks[i]["id"]} - ', font=("Arial", 30))
-
-        # Name Textbox
-        task_name = ctk.CTkTextbox(name_frame, font=("Arial", 30), border_width=0,
-                                   height=1, width=300, fg_color="gray14", wrap="none")
-        task_name.insert('1.0', f'{tasks[i]["name"]}')
-        task_name.configure(state="disabled")
-        task_name.grid(row=0, column=1, sticky="nsw", pady=10)
-
-        name_label.grid(row=0, column=0, sticky="nsw", padx=(10, 0))
-
-        # Completion Checkbox
-        complete_frame = ctk.CTkFrame(task_detail_frame, fg_color="gray14", width=100)
-        complete_text = ctk.CTkLabel(complete_frame, text="Complete ", font=("Arial", 30))
-        task_var = ctk.BooleanVar(value=True if tasks[i]["status"] == "closed" else False)
-        complete_box = ctk.CTkCheckBox(complete_frame, variable=task_var, command=lambda index=i: toggle_active(index),
-                                       text="",
-                                       checkbox_width=30,
-                                       checkbox_height=30)
-        complete_text.grid(column=0, row=0, sticky="nsew", pady=10)
-        complete_box.grid(column=1, row=0, sticky="nsew")
-        complete_frame.grid(column=1, row=0, sticky="nsw", pady=10, padx=10)
-
-        # Editing Button
-        edit_button = ctk.CTkButton(task_detail_frame, text="Edit", command=lambda index=i: edit_task(index),
-                                    font=("Arial", 30), width=80, bg_color="gray20")
-        edit_button.grid(column=2, row=0, sticky="nsw", pady=10)
-
-        # Date
-        date = ctk.CTkTextbox(task_detail_frame, font=("Arial", 30), border_width=0, height=1,
-                              width=175,
-                              fg_color="gray20", wrap="none")
-        date.insert('1.0', tasks[i]["date"])
-        date.configure(state="disabled")
-        date.grid(row=1, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
-
-        # Attribute Label
-        attribute_label = ctk.CTkButton(task_detail_frame, text="Attributes", font=("Arial", 30), command=lambda
-            index=i: build_attribute_options(index), state="disabled", bg_color="gray14", fg_color="gray14")
-        attribute_label.grid(row=2, column=0, columnspan=3, sticky="nsw", pady=10, padx=15)
-        # Attributes
-        max_j = 0
-        attributes = []
-        for j, attr in enumerate(tasks[i]["attributes"]):
-            # attr_text = f'{attr["name"].strip()}: {attr["value"].strip()}'
-            # attribute = ctk.CTkLabel(task_detail_frame, text=attr_text, font=("Arial", 25),
-            #                                fg_color="gray20", corner_radius=10)
-            # attribute.grid(row=3+j, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
-            # attributes.append(attribute)
-            task_detail_frame.rowconfigure(index=3 + j, weight=1, uniform="row")
-            max_j = j
-
-        # Description Label
-        description_label = ctk.CTkLabel(task_detail_frame, text="Description", font=("Arial", 30), padx=15)
-        description_label.grid(row=max_j + 4, column=0, columnspan=3, sticky="nsw")
-        # Description
-        description = ctk.CTkTextbox(task_detail_frame, font=("Arial", 20), padx=15, wrap='word', width=800,
-                                     height=300, spacing2=10)
-        description.insert('1.0', tasks[i]["description"])
-        description.configure(state="disabled")
-        description.grid(row=max_j + 5, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
-
-        # Create a Scrollbar and attach it to the Text widget
-        scrollbar = ctk.CTkScrollbar(task_detail_frame, command=description.yview)
-        scrollbar.grid(row=max_j + 5, column=3, sticky='nsew')
-        description['yscrollcommand'] = scrollbar.set
-
-        task_detail_frame.rowconfigure(index=max_j + 4, weight=1)
-        task_detail_frame.rowconfigure(index=max_j + 5, weight=1)
-
-        task_detail_frame.grid(row=1, column=1, columnspan=3, sticky='new')
-        task_detail_frames.append((task_detail_frame, {
-            "name": task_name,
-            "date": date,
-            "description": description,
-            "attributes": attributes,
-            "attribute_label": attribute_label,
-            "complete": task_var,
-            "edit_button": edit_button
-
-        }))
+# def build_task_details():
+#     print("Building Task Details")
+#     extra_space.tkraise()
+#     for i in range(len(tasks)):
+#         # Create a new frame for the task detail view and add it to the list
+#         task_detail_frame = ctk.CTkFrame(right_final_window, bg_color="gray14", fg_color="gray14", height=800)
+#
+#         task_detail_frame.columnconfigure(index=0, weight=1, uniform="column")
+#         task_detail_frame.columnconfigure(index=1, weight=1)
+#         task_detail_frame.columnconfigure(index=2, weight=1, uniform="column")
+#         task_detail_frame.rowconfigure(index=0, weight=1)
+#         task_detail_frame.rowconfigure(index=1, weight=1)
+#
+#         # Name Frame
+#         name_frame = ctk.CTkFrame(task_detail_frame, bg_color="gray14", fg_color="gray14")
+#         name_frame.grid(row=0, column=0, sticky="nsw")
+#         name_frame.columnconfigure(0, weight=1)
+#         name_frame.columnconfigure(1, weight=1)
+#
+#         # Name Label
+#         name_label = ctk.CTkLabel(name_frame, text=f'Task {tasks[i]["id"]} - ', font=("Arial", 30))
+#
+#         # Name Textbox
+#         task_name = ctk.CTkTextbox(name_frame, font=("Arial", 30), border_width=0,
+#                                    height=1, width=300, fg_color="gray14", wrap="none")
+#         task_name.insert('1.0', f'{tasks[i]["name"]}')
+#         task_name.configure(state="disabled")
+#         task_name.grid(row=0, column=1, sticky="nsw", pady=10)
+#
+#         name_label.grid(row=0, column=0, sticky="nsw", padx=(10, 0))
+#
+#         # Completion Checkbox
+#         complete_frame = ctk.CTkFrame(task_detail_frame, fg_color="gray14", width=100)
+#         complete_text = ctk.CTkLabel(complete_frame, text="Complete ", font=("Arial", 30))
+#         task_var = ctk.BooleanVar(value=True if tasks[i]["status"] == "closed" else False)
+#         complete_box = ctk.CTkCheckBox(complete_frame, variable=task_var, command=lambda index=i: toggle_active(index),
+#                                        text="",
+#                                        checkbox_width=30,
+#                                        checkbox_height=30)
+#         complete_text.grid(column=0, row=0, sticky="nsew", pady=10)
+#         complete_box.grid(column=1, row=0, sticky="nsew")
+#         complete_frame.grid(column=1, row=0, sticky="nsw", pady=10, padx=10)
+#
+#         # Editing Button
+#         edit_button = ctk.CTkButton(task_detail_frame, text="Edit", command=lambda index=i: edit_task(index),
+#                                     font=("Arial", 30), width=80, bg_color="gray20")
+#         edit_button.grid(column=2, row=0, sticky="nsw", pady=10)
+#
+#         # Date
+#         date = ctk.CTkTextbox(task_detail_frame, font=("Arial", 30), border_width=0, height=1,
+#                               width=175,
+#                               fg_color="gray20", wrap="none")
+#         date.insert('1.0', tasks[i]["date"])
+#         date.configure(state="disabled")
+#         date.grid(row=1, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
+#
+#         # Attribute Label
+#         attribute_label = ctk.CTkButton(task_detail_frame, text="Attributes", font=("Arial", 30), command=lambda
+#             index=i: build_attribute_options(index), state="disabled", bg_color="gray14", fg_color="gray14")
+#         attribute_label.grid(row=2, column=0, columnspan=3, sticky="nsw", pady=10, padx=15)
+#         # Attributes
+#         max_j = 0
+#         attributes = []
+#         for j, attr in enumerate(tasks[i]["attributes"]):
+#             # attr_text = f'{attr["name"].strip()}: {attr["value"].strip()}'
+#             # attribute = ctk.CTkLabel(task_detail_frame, text=attr_text, font=("Arial", 25),
+#             #                                fg_color="gray20", corner_radius=10)
+#             # attribute.grid(row=3+j, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+#             # attributes.append(attribute)
+#             task_detail_frame.rowconfigure(index=3 + j, weight=1, uniform="row")
+#             max_j = j
+#
+#         # Description Label
+#         description_label = ctk.CTkLabel(task_detail_frame, text="Description", font=("Arial", 30), padx=15)
+#         description_label.grid(row=max_j + 4, column=0, columnspan=3, sticky="nsw")
+#         # Description
+#         description = ctk.CTkTextbox(task_detail_frame, font=("Arial", 20), padx=15, wrap='word', width=800,
+#                                      height=300, spacing2=10)
+#         description.insert('1.0', tasks[i]["description"])
+#         description.configure(state="disabled")
+#         description.grid(row=max_j + 5, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
+#
+#         # Create a Scrollbar and attach it to the Text widget
+#         scrollbar = ctk.CTkScrollbar(task_detail_frame, command=description.yview)
+#         scrollbar.grid(row=max_j + 5, column=3, sticky='nsew')
+#         description['yscrollcommand'] = scrollbar.set
+#
+#         task_detail_frame.rowconfigure(index=max_j + 4, weight=1)
+#         task_detail_frame.rowconfigure(index=max_j + 5, weight=1)
+#
+#         task_detail_frame.grid(row=1, column=1, columnspan=3, sticky='new')
+#         task_detail_frames.append((task_detail_frame, {
+#             "name": task_name,
+#             "date": date,
+#             "description": description,
+#             "attributes": attributes,
+#             "attribute_label": attribute_label,
+#             "complete": task_var,
+#             "edit_button": edit_button
+#
+#         }))
 
 
 def toggle_active(n):
@@ -1245,32 +1579,33 @@ def build_task_list():
         i += 1
 
 
-build_task_list()
-build_task_details()
-change_task(0)
+# build_task_list()
+# build_task_details()
+# change_task(0)
 
-# Add menu
-menu_bar = ctk.CTkFrame(root)
-menu_bar.grid(row=0, column=0, columnspan=4, sticky='nsew')
+# # Add menu
+# menu_bar = ctk.CTkFrame(root)
+# menu_bar.grid(row=0, column=0, columnspan=4, sticky='nsew')
+#
+# # Sort & Filter
+# sorting_button = ctk.CTkButton(menu_bar, text="Sort and Filter", font=("Arial", 20), width=40, height=20)
+# sorting_button.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
+#
+# # Add
+# add_task_button = ctk.CTkButton(menu_bar, text="Add Task", font=("Arial", 20), width=20, height=20, command=add_task)
+# add_task_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
+#
+# # Help Button
+# help_button = ctk.CTkButton(menu_bar, text="What's New? / Help", font=("Arial", 20), width=20, height=20,
+#                             command=open_help)
+# help_button.grid(row=0, column=4, sticky="nsew", pady=10, padx=10)
+#
+# # Config menu bar grid
+# menu_bar.columnconfigure(0, weight=1)
+# menu_bar.columnconfigure(1, weight=1)
+# menu_bar.columnconfigure(2, weight=4)
+# menu_bar.columnconfigure(3, weight=4)
+# menu_bar.columnconfigure(4, weight=1)
 
-# Sort & Filter
-sorting_button = ctk.CTkButton(menu_bar, text="Sort and Filter", font=("Arial", 20), width=40, height=20)
-sorting_button.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
-
-# Add
-add_task_button = ctk.CTkButton(menu_bar, text="Add Task", font=("Arial", 20), width=20, height=20, command=add_task)
-add_task_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
-
-# Help Button
-help_button = ctk.CTkButton(menu_bar, text="What's New? / Help", font=("Arial", 20), width=20, height=20,
-                            command=open_help)
-help_button.grid(row=0, column=4, sticky="nsew", pady=10, padx=10)
-
-# Config menu bar grid
-menu_bar.columnconfigure(0, weight=1)
-menu_bar.columnconfigure(1, weight=1)
-menu_bar.columnconfigure(2, weight=4)
-menu_bar.columnconfigure(3, weight=4)
-menu_bar.columnconfigure(4, weight=1)
-
-root.mainloop()
+# root.update()
+# root.mainloop()
