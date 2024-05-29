@@ -7,18 +7,17 @@
             "description": "Description for task 1",
             "attributes": [
                 {
+                    "id": 3,
                     "name": "Class",
                     "value": " Class 1"
                 },
                 {
+                    "id": 4,
                     "name": "Size",
                     "value": " 1"
                 },
                 {
-                    "name": "Priority",
-                    "value": "Test value"
-                },
-                {
+                    "id": 2,
                     "name": "name",
                     "value": "value"
                 }
@@ -32,14 +31,17 @@
             "description": "No more :)",
             "attributes": [
                 {
+                    "id": 3,
                     "name": "Class",
                     "value": " Class 1"
                 },
                 {
+                    "id": 4,
                     "name": "Size",
                     "value": " 10"
                 },
                 {
+                    "id": 5,
                     "name": "Test",
                     "value": "Test!"
                 }
@@ -53,14 +55,17 @@
             "description": "New Description",
             "attributes": [
                 {
+                    "id": 2,
                     "name": "name",
                     "value": "value"
                 },
                 {
+                    "id": 1,
                     "name": "Priority",
                     "value": "value"
                 },
                 {
+                    "id": 2,
                     "name": "name",
                     "value": "value"
                 }
@@ -102,10 +107,24 @@
     ],
     "attributes": [
         {
+            "id": 1,
             "name": "Priority"
         },
         {
+            "id": 2,
             "name": "name"
+        },
+        {
+            "id": 3,
+            "name": "Class"
+        },
+        {
+            "id": 4,
+            "name": "Size"
+        },
+        {
+            "id": 5,
+            "name": "Test"
         }
     ]
 }
