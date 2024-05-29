@@ -1,23 +1,23 @@
 {
     "tasks": [
         {
-            "id": 1,
+            "id": 0,
             "name": "Milestone 2",
             "date": "06/03/2024",
             "description": "Description for task 1",
             "attributes": [
                 {
-                    "id": 3,
+                    "id": 2,
                     "name": "Class",
                     "value": " Class 1"
                 },
                 {
-                    "id": 4,
+                    "id": 3,
                     "name": "Size",
                     "value": " 1"
                 },
                 {
-                    "id": 2,
+                    "id": 1,
                     "name": "name",
                     "value": "value"
                 }
@@ -25,23 +25,23 @@
             "status": "open"
         },
         {
-            "id": 2,
+            "id": 1,
             "name": "Prototype",
             "date": "05/03/2024",
             "description": "No more :)",
             "attributes": [
                 {
-                    "id": 3,
+                    "id": 2,
                     "name": "Class",
                     "value": " Class 1"
                 },
                 {
-                    "id": 4,
+                    "id": 3,
                     "name": "Size",
                     "value": " 10"
                 },
                 {
-                    "id": 5,
+                    "id": 4,
                     "name": "Test",
                     "value": "Test!"
                 }
@@ -49,23 +49,23 @@
             "status": "open"
         },
         {
-            "id": 3,
+            "id": 2,
             "name": "New Task",
             "date": "2024/01/01",
             "description": "New Description",
             "attributes": [
                 {
-                    "id": 2,
+                    "id": 1,
                     "name": "name",
                     "value": "value"
                 },
                 {
-                    "id": 1,
+                    "id": 0,
                     "name": "Priority",
                     "value": "value"
                 },
                 {
-                    "id": 2,
+                    "id": 1,
                     "name": "name",
                     "value": "value"
                 }
@@ -73,7 +73,7 @@
             "status": "closed"
         },
         {
-            "id": 4,
+            "id": 3,
             "name": "New Task",
             "date": "2024/01/01",
             "description": "New Description",
@@ -81,7 +81,7 @@
             "status": "open"
         },
         {
-            "id": 5,
+            "id": 4,
             "name": "New Task",
             "date": "2024/01/01",
             "description": "New Description",
@@ -89,7 +89,7 @@
             "status": "closed"
         },
         {
-            "id": 6,
+            "id": 5,
             "name": "New Task Name",
             "date": "2024/01/01",
             "description": "New Description",
@@ -97,7 +97,7 @@
             "status": "open"
         },
         {
-            "id": 7,
+            "id": 6,
             "name": "New Task Name",
             "date": "2024/01/01",
             "description": "New Description",
@@ -107,23 +107,23 @@
     ],
     "attributes": [
         {
-            "id": 1,
+            "id": 0,
             "name": "Priority"
         },
         {
-            "id": 2,
+            "id": 1,
             "name": "name"
         },
         {
-            "id": 3,
+            "id": 2,
             "name": "Class"
         },
         {
-            "id": 4,
+            "id": 3,
             "name": "Size"
         },
         {
-            "id": 5,
+            "id": 4,
             "name": "Test"
         }
     ]

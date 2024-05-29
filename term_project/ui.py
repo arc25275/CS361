@@ -2,20 +2,433 @@ import customtkinter as ctk
 import tkinter as tk
 import zmq
 import json
-from typing import Self
-
-
+from typing import Self, Type
+import logging
+import sys
+import argparse
 # TODO: When functions are done, improve docstring with more info
 
 
-class Client:
-    """TODO"""
+class CustomFormatter(logging.Formatter):
+    """TODO:Custom logging formatter"""
+    grey = "\x1b[38;20m"
+    blue = "\x1b[36m"
+    yellow = "\x1b[33;20m"
+    red = "\x1b[31;20m"
+    bold_red = "\x1b[31;1m"
+    reset = "\x1b[0m"
+    format = "%(asctime)s - %(levelname)s - %(name)s:%(funcName)s:(l:%(lineno)d) - %(message)s"
 
-    def __init__(self, connection):
+    FORMATS = {
+        logging.DEBUG: grey + format + reset,
+        logging.INFO: blue + format + reset,
+        logging.WARNING: yellow + format + reset,
+        logging.ERROR: red + format + reset,
+        logging.CRITICAL: bold_red + format + reset
+    }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
+class LoggingHandler:
+    """TODO:Logging Handler for classes"""
+    def __init__(self, *args, **kwargs):
+        # Be able to enable debug if needed
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--debug',
+                            help='Enable debug logging', action='store_true')
+        args = parser.parse_args()
+        # Set up formatter and logger
+        self.log = logging.getLogger(self.__class__.__name__)
+        # create console handler with a higher log level
+        ch = logging.StreamHandler(stream=sys.stdout)
+        if args.debug:
+            ch.setLevel(logging.DEBUG)
+            self.log.setLevel(logging.DEBUG)
+        else:
+            ch.setLevel(logging.INFO)
+            self.log.setLevel(logging.INFO)
+        ch.setFormatter(CustomFormatter())
+        self.log.addHandler(ch)
+
+
+class AttributeRecord(LoggingHandler):
+    def __init__(self, client, attr_id, name, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.client: Client = client
+        self.id: int = attr_id
+        self.name: str = name
+
+    def __str__(self):
+        return f"ID:{self.id} ({self.name})"
+
+    def delete(self) -> bool:
+        """Delete attribute from server
+        :return: True if successful, False if not
+        """
+        response = self.client.connection.delete(f"attributes/{self.id}", "")
+        if response["code"] == 200:
+            self.client.attribute_records.remove(self)
+            self.log.debug(f"Attribute deleted from server: {self}")
+            return True
+        else:
+            self.log.error(f"Error deleting attribute: {response["code"]} : {response["message"]}")
+            return False
+
+    def build_record_option(self, parent, task) -> dict:
+        # tkLayout
+        #  attr_frame
+        #  > attr_name
+        #  > attr_value
+        #  > add_button
+        attr_frame = ctk.CTkFrame(parent, bg_color="gray14", fg_color="gray14")
+        attr_frame.columnconfigure(0, weight=1)
+        attr_frame.columnconfigure(1, weight=1)
+        attr_frame.columnconfigure(2, weight=1)
+
+        attr_name = ctk.CTkTextbox(attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
+                                   fg_color="gray20", wrap="none", corner_radius=10, )
+        attr_name.insert('1.0', f'{self.name}')
+        attr_name.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
+
+        attr_value = ctk.CTkTextbox(attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
+                                    fg_color="royal blue", wrap="none", corner_radius=10)
+        attr_value.insert('1.0', "value")
+        attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+
+        add_button = ctk.CTkButton(attr_frame, text="Add", font=("Arial", 25), width=80, bg_color="gray20")
+        add_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
+        add_button.bind("<Button-1>", lambda: task.add_attribute(self.id, attr_value.get("1.0", "end-1c")))
+        option = {
+            "type": "new",
+            "frame": attr_frame,
+            "name": attr_name,
+            "value": attr_value,
+            "add": add_button
+        }
+        self.log.debug(f"Existing attribute option built with [{self}]: {option}")
+        return option
+
+
+class Attribute(AttributeRecord):
+    """Attribute for tasks. Can belong to a task, or be standalone"""
+    def __init__(self, client, attr_id, name, value, task=None, *args, **kwargs):
+        super().__init__(client, attr_id, name, *args, **kwargs)
+        self.client: Client = client
+        self.id: int = attr_id
+        self.name: str = name
+        self.value: str = value
+        self.task: Task = task
+        self.UI: dict = {
+            "label": self.build_label(self.task.UI["detail_view"]) if self.task is not None else None,
+            "option": self.build_current_option(self.task.UI["detail_view"]) if self.task is not None else None
+        }
+        self.log.info(f"Attribute created: {self}")
+
+    def __str__(self):
+        return f"ID:{self.id} ({self.name} - {self.value} - [{self.task}])"
+
+    def edit(self, new_value: str) -> Self | None:
+        """Edit attribute value
+        :param new_value: New value to replace previous
+        :return: Updated attribute
+        """
+        response = self.client.connection.put(f"tasks/{self.task.id}/attributes", {"id": self.id, "value": new_value})
+        if response["code"] == 200:
+            self.value = new_value
+            if self.task is not None:
+                self.UI["label"].configure(text=f'{self.name}: {self.value}')
+                self.UI["option"]["value"].delete("1.0", "end")
+                self.UI["option"]["value"].insert("1.0", f'{self.value}')
+                self.log.debug(f"Attribute updated to {self}")
+            return self
+        else:
+            self.log.error(f"Error updating attribute: {response["code"]} : {response["message"]}")
+            return None
+
+    def update_value_temp(self, value: str):
+        """Update the value of the attribute temporarily while typing
+            :param value: The new value of the attribute
+            """
+        self.value = value
+
+    def remove(self) -> bool:
+        """Remove attribute from task, and make it ready to delete.
+        :return: True if successful, False if not
+        """
+        if self.task is None:
+            self.log.warning("No task to remove attribute from")
+            return False
+        response = self.client.connection.delete(f"tasks/{self.task.id}/attributes/", {"id": self.id})
+        if response["code"] == 200:
+            self.task.attributes.remove(self)
+            self.log.debug(f"Attribute removed from task: {self}")
+            return True
+        else:
+            self.log.error(f"Error removing attribute: {response["code"]} : {response["message"]}")
+            return False
+
+    def build_label(self, parent) -> ctk.CTkLabel:
+        """Build the label for the attribute
+        :param parent: Parent of the label
+        :return: Completed label
+        """
+        attr_text = f'{self.name}: {self.value}'
+        attribute_label = ctk.CTkLabel(parent, text=attr_text, font=("Arial", 25),
+                                       fg_color="gray20", corner_radius=10)
+        self.log.debug(f"Attribute label built with text [{attr_text}]: {attribute_label}")
+        return attribute_label
+
+    def build_current_option(self, parent) -> dict:
+        """Build the option for the attribute
+        :param parent: Parent of the option
+        :return: Completed option with all parts, and status. Will include frame, name, value, and remove button
+        """
+        # tkLayout
+        #  attr_frame
+        #  > attr_name
+        #  > attr_value
+        #  > remove_button
+        attr_frame = ctk.CTkFrame(parent, bg_color="gray14", fg_color="gray14")
+        attr_frame.columnconfigure(0, weight=1)
+        attr_frame.columnconfigure(1, weight=1)
+        attr_frame.columnconfigure(2, weight=1)
+
+        attr_name = ctk.CTkLabel(attr_frame, text=f'{self.name}', font=("Arial", 25),
+                                 fg_color="gray20", corner_radius=10, padx=10, pady=10)
+        attr_name.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
+        attr_value = ctk.CTkTextbox(attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
+                                    fg_color="royal blue", wrap="none")
+        # On Typing, update the attribute
+        attr_value.bind("<KeyRelease>", lambda: self.update_value_temp(attr_value.get("1.0", "end-1c")))
+        attr_value.insert('1.0', f'{self.value}')
+        attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+
+        remove_button = ctk.CTkButton(attr_frame, text="Remove", font=("Arial", 25), width=80, bg_color="gray20")
+        remove_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
+        remove_button.bind("<Button-1>", lambda: self.task.remove_attribute(self.id))
+        option = {
+            "type": "current",
+            "frame": attr_frame,
+            "name": attr_name,
+            "value": attr_value,
+            "remove": remove_button
+        }
+        self.log.debug(f"Current attribute option built with [{self}]: {option}")
+        return option
+
+
+class Task(LoggingHandler):
+    """TODO TASK DOCSTRING"""
+
+    def __init__(self, client, task_id, name, date, description, status, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.client: Client = client
+        self.id: int = task_id
+        self.name: str = name
+        self.date: str = date
+        self.description: str = description
+        self.attributes: list[Attribute] = []
+        self.status: str = status
+        self.UI: dict = {
+            "list_item": self.build_list_item(self.client.UI["task_container"]),
+            "detail_view": self.build_detail_view(self.client.UI["detail_container"]),
+            "attribute_options": self.build_attribute_options(self.client.UI["detail_container"])
+        }
+        self.log.info(f"Task created: {self}")
+
+    def __str__(self):
+        attr_list = [f'{attr.id}:{attr.name}' for attr in self.attributes]
+        return f"ID:{self.id} ({self.name} - {self.date} - {self.description} - {attr_list} - {self.status})"
+
+    # Update Data
+
+    def edit(self, new_data) -> Self | None:
+        """Edit task with new data
+        :param new_data: The new data for the task. Will include the new name, date, description, and attributes
+        :return: Updated task if successful, None if not
+        """
+        # Compare new data to old data
+        response = self.client.connection.put(f"tasks/{self.id}", new_data)
+        if response["code"] == 200:
+            for key, value in new_data.items():
+                if self.__dict__[key] != value:
+                    self.__dict__[key] = value
+            self.log.debug(f"Task updated to {self}")
+            return self
+        else:
+            self.log.error(f"Error updating task: {response["code"]} : {response["message"]}")
+            return None
+
+    def delete(self) -> bool:
+        """Delete task from server
+        :return: True if successful, False if not
+        """
+        response = self.client.connection.delete(f"tasks/{self.id}", "")
+        if response["code"] == 200:
+            for attr in self.attributes:
+                attr.remove()
+                del attr
+            self.client.tasks.remove(self)
+
+            self.log.debug(f"Task deleted: {self}")
+            return True
+        else:
+            self.log.error(f"Error deleting task: {response["code"]} : {response["message"]}")
+            return False
+
+    def toggle_active(self) -> str:
+        """Toggle task status between active and complete
+        :return: New status
+        """
+        if self.status == "open":
+            self.status = "closed"
+        else:
+            self.status = "open"
+        self.edit({
+            "status": self.status
+        })
+        self.log.debug(f"Task status toggled to {self.status}")
+        return self.status
+
+    # UI
+    def build_list_item(self, parent) -> dict:
+        """Build the list item that shows on the left side. Will include name, date, and attributes
+        :param parent: Parent of the CtkButton
+        :return: UI item
+        """
+        # tkLayout
+        #  button
+        #  > name
+        #  > filler
+        #  > attributes
+        button = ctk.CTkButton(parent, command=lambda index=self.id: self.client.change_task(index), text="", width=400,
+                               height=100)
+        if self.status == "closed":
+            button.configure(bg_color="gray20", fg_color="gray20")
+
+        # Name for task title
+        name = ctk.CTkLabel(button, text=f'{self.date} - {self.name}', font=("Arial", 20), padx=10, pady=10,
+                            fg_color="transparent", bg_color="transparent")
+        name.grid(row=0, column=0, sticky="nsw")
+        # Bind the click event to the label, so you can click anywhere on the task
+        name.bind("<Button-1>", lambda event, index=self.id: self.client.change_task(index))
+
+        # Filler for checkmark and empty space
+        filler = ctk.CTkLabel(button, text="", padx=10)
+        if self.status == "closed":
+            filler.configure(text="✓", font=("Arial", 20))
+        filler.grid(row=1, column=0, sticky="w")
+
+        # Attributes for task
+        attr_list = ", ".join(attr.value for attr in self.attributes)
+        attributes = ctk.CTkLabel(button, text=f'{attr_list}', font=("Arial", 20), padx=10, pady=10)
+        attributes.grid(row=2, column=0, sticky="nsw")
+        attributes.bind("<Button-1>", lambda event, index=self.id: self.client.change_task(index))
+        list_item = {
+            "button": button,
+            "filler": filler,
+            "name": name,
+            "attributes": attributes
+        }
+        self.log.debug(f"Task list item built with [{self}]: {list_item}")
+        return list_item
+
+    def build_detail_view(self, parent):
+        """TODO:Build task detail view"""
+        pass
+
+    def build_attribute_options(self, parent):
+        """TODO:Build attribute options for task. Hide below task details"""
+        # Grid frames for current attributes, existing attributes, and new attributes
+        # Update value when closed
+        pass
+
+    # Manage Attributes
+    def create_attribute(self, name: str, value: str) -> Attribute | None:
+        """Create an entirely new attribute, and add it to the task
+        :param name: Name to be used
+        :param value: Value to be used
+        :return: Attribute if successful, None if not
+        """
+        attr_id = len(self.client.attribute_records)
+        new_attribute = Attribute(self.client, attr_id, name, value, self)
+        # Add attribute to main list, and then to task.
+        attr_response = self.client.connection.post(f"attributes", {"id": attr_id, "name": name})
+        task_response = self.client.connection.post(f"tasks/{self.id}/attributes", {"id": attr_id, "name": name, "value": value})
+
+        if task_response["code"] == 200 and attr_response["code"] == 200:
+            self.attributes.append(new_attribute)
+            self.log.info(f"Attribute created and added to task {self.id}: {new_attribute}")
+            return new_attribute
+        else:
+            self.log.error(f"Adding attribute to list gave: {attr_response["code"]} : {attr_response["message"]}")
+            self.log.error(f"Adding attribute to task gave: {task_response["code"]} : {task_response["message"]}")
+            return None
+
+    def add_attribute(self, attr_id: int, value: str) -> Attribute | None:
+        """Add an existing attribute to the task
+        :param attr_id: ID of the attribute to be added
+        :param value: New value for the attribute
+        :return: Newly added attribute
+        """
+        name = self.client.attribute_records[attr_id].name
+        response = self.client.connection.post(f"tasks/{self.id}/attributes", {"id": attr_id, "name": name, "value": value})
+        if response["code"] == 200:
+            new_attribute = Attribute(self.client, attr_id, name, value, self)
+            self.attributes.append(new_attribute)
+            return new_attribute
+        else:
+            print(f"Error adding attribute: {response["code"]} : {response["message"]}")
+            return None
+
+    def remove_attribute(self, attr_id: int) -> bool:
+        """Remove attribute from task, and delete it from memory
+        :param attr_id: ID of the attribute to be removed
+        :return: True if successful, False if not
+        """
+        # Get attribute based on list of attributes
+        attribute = self.attributes[attr_id]
+        response = self.client.connection.delete(f"tasks/{self.id}/attributes", {"id": attribute.id})
+        if response["code"] == 200:
+            self.attributes.remove(attribute)
+            removed = attribute.remove()
+            if removed:
+                self.log.info(f"Attribute removed from task {self.id}: {attribute}")
+                del attribute
+                return True
+            else:
+                self.log.error(f"Error removing attribute from task {self.id}: {attribute}")
+        else:
+            self.log.error(f"Error removing attribute from task: {response["code"]} : {response["message"]}")
+            return False
+
+    def update_attribute(self, attr_id, value):
+        """Update attribute value
+        :param attr_id: ID of the attribute to be updated
+        :param value: New value for the attribute
+        """
+        attribute = self.attributes[attr_id]
+        updated = attribute.edit(value)
+        if updated is not None:
+            self.log.info(f"Attribute updated in task {self.id}: {attribute}")
+        else:
+            self.log.error(f"Error updating attribute in task {self.id}: {attribute}")
+
+
+
+class Client(LoggingHandler):
+    """TODO CLIENT DOCSTRING"""
+
+    def __init__(self, connection, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.root = ctk.CTk()
-        self.tasks = []
-        self.attributes = []
-        self.connection = connection
+        self.tasks: list[Task] = []
+        self.attribute_records: list[AttributeRecord] = []
+        self.connection: Connection = connection
         self.UI = {
             "root": self.root,
             "task_container": None,
@@ -68,8 +481,7 @@ class Client:
 
     # Updating UI
     def update_list(self):
-        """TODO:
-        Update the task list to match server data.
+        """TODO:Update the task list to match server data.
         Checks if any tasks have been added, removed or updated
         """
         pass
@@ -96,7 +508,7 @@ class Client:
 
     def toggle_active(self, n):
         """TODO:Toggle task status"""
-        # Change checkmark and colors
+        # Change checkmark and colors, and task status
         pass
 
     def change_task(self, n):
@@ -120,281 +532,11 @@ class Client:
         pass
 
 
-class Task:
-    """TODO"""
-
-    def __init__(self, client, task_id, name, date, description, attributes, status):
-        self.client = client
-        self.id = task_id
-        self.name = name
-        self.date = date
-        self.description = description
-        self.attributes = attributes
-        self.status = status
-        self.UI = {
-            "list_item": self.build_list_item(self.client.UI["task_container"]),
-            "detail_view": self.build_detail_view(self.client.UI["detail_container"]),
-            "attribute_options": self.build_attribute_options(self.client.UI["detail_container"])
-        }
-
-    def __str__(self):
-        return f"{self.name} - {self.date} - {self.description} - {self.attributes} - {self.status}"
-
-    def __repr__(self):
-        return f"{self.name} - {self.date} - {self.description} - {self.attributes} - {self.status}"
-
-    # Update Data
-    def edit(self, new_data) -> Self | None:
-        """Edit task with new data
-        :param new_data: The new data for the task. Will include the new name, date, description, and attributes
-        :return: Updated task
-        """
-        # Compare new data to old data
-        response = self.client.connection.put(f"tasks/{self.id}", new_data)
-        if response["code"] == 200:
-            for key, value in new_data.items():
-                if self.__dict__[key] != value:
-                    self.__dict__[key] = value
-            return self
-        else:
-            print(f"Error updating task: {response["code"]} : {response["message"]}")
-            return None
-
-    def delete(self) -> bool:
-        """Delete task from server
-        :return: True if successful, False if not
-        """
-        response = self.client.connection.delete(f"tasks/{self.id}")
-        if response["code"] == 200:
-            self.client.tasks.remove(self)
-            return True
-        else:
-            print("Error deleting task")
-            return False
-
-    def toggle_active(self) -> str:
-        """Toggle task status between active and complete
-        :return: New status
-        """
-        if self.status == "open":
-            self.status = "closed"
-        else:
-            self.status = "open"
-        self.edit({
-            "status": self.status
-        })
-        return self.status
-
-    # UI
-    def build_list_item(self, parent) -> dict:
-        """Build the list item that shows on the left side. Will include name, date, and attributes
-        :param parent: Parent of the CtkButton
-        :return: UI item
-        """
-        button = ctk.CTkButton(parent, command=lambda index=self.id: self.client.change_task(index), text="", width=400,
-                               height=100)
-        if self.status == "closed":
-            button.configure(bg_color="gray20", fg_color="gray20")
-
-        # Name for task title
-        name = ctk.CTkLabel(button, text=f'{self.date} - {self.name}', font=("Arial", 20), padx=10, pady=10,
-                            fg_color="transparent", bg_color="transparent")
-        name.grid(row=0, column=0, sticky="nsw")
-        # Bind the click event to the label, so you can click anywhere on the task
-        name.bind("<Button-1>", lambda event, index=self.id: change_task(index))
-
-        # Filler for checkmark and empty space
-        filler = ctk.CTkLabel(button, text="", padx=10)
-        if self.status == "closed":
-            filler.configure(text="✓", font=("Arial", 20))
-        filler.grid(row=1, column=0, sticky="w")
-
-        # Attributes for task
-        attr_list = ", ".join(attr.value for attr in self.attributes)
-        attributes = ctk.CTkLabel(button, text=f'{attr_list}', font=("Arial", 20), padx=10, pady=10)
-        attributes.grid(row=2, column=0, sticky="nsw")
-        attributes.bind("<Button-1>", lambda event, index=self.id: change_task(index))
-
-        return {
-            "button": button,
-            "filler": filler,
-            "name": name,
-            "attributes": attributes
-        }
-
-    def build_detail_view(self, parent):
-        """TODO:Build task detail view"""
-        pass
-
-    def build_attribute_options(self, parent):
-        """TODO:Build attribute options for task. Hide below task details"""
-        # Grid frames for current attributes, existing attributes, and new attributes
-        # Update value when closed
-        pass
-
-    # Manage Attributes
-    def create_attribute(self, attr_id, name, value):
-        """TODO:Create attribute for task"""
-        pass
-
-    def add_attribute(self, attr_id, value):
-        """TODO:Add attribute to task"""
-        # Build label and options
-        pass
-
-    def remove_attribute(self, attr_id):
-        """TODO:Remove attribute from task"""
-        pass
-
-    def update_attribute(self, attr_id, value):
-        """TODO:Update attribute with new value"""
-        pass
-
-
-class Attribute:
-    """Attribute for tasks. Can belong to a task, or be standalone"""
-
-    def __init__(self, client, attr_id, name, value, task=None):
-        self.client = client
-        self.id = attr_id
-        self.name = name
-        self.value = value
-        self.task = task
-        self.UI = {
-            "label": self.build_label(self.task.UI["detail_view"]) if self.task is not None else None,
-            "option": self.build_option(self.task.UI["detail_view"]) if self.task is not None else None
-        }
-
-    def __str__(self):
-        return f"{self.name} - {self.value}"
-
-    def __repr__(self):
-        return f"{self.name} - {self.value}"
-
-    def edit(self, new_value: str) -> Self | None:
-        """Edit attribute value
-        :param new_value: New value to replace previous
-        :return: Updated attribute
-        """
-        response = self.client.connection.put(f"tasks/{self.task.id}/attributes", {"id": self.id, "value": new_value})
-        if response["code"] == 200:
-            self.value = new_value
-            if self.task is not None:
-                self.UI["label"].configure(text=f'{self.name}: {self.value}')
-                self.UI["option"]["value"].delete("1.0", "end")
-                self.UI["option"]["value"].insert("1.0", f'{self.value}')
-            return self
-        else:
-            print("Error updating attribute")
-            return None
-
-    def update_value_temp(self, value: str):
-        """Update the value of the attribute temporarily while typing
-            :param value: The new value of the attribute
-            """
-        self.value = value
-
-    def remove(self) -> bool:
-        """Remove attribute from task
-        :return: True if successful, False if not
-        """
-        if self.task is None:
-            print("No task to remove attribute from")
-            return False
-        response = self.client.connection.delete(f"tasks/{self.task.id}/attributes/", {"id": self.id})
-        if response["code"] == 200:
-            self.task.attributes.remove(self)
-            return True
-        else:
-            print("Error removing attribute")
-            return False
-
-    def delete(self) -> bool:
-        """Delete attribute from server
-        :return: True if successful, False if not
-        """
-        response = self.client.connection.delete(f"attributes/{self.id}")
-        if response["code"] == 200:
-            self.client.attributes.remove(self)
-            return True
-        else:
-            print("Error deleting attribute")
-            return False
-
-    def build_label(self, parent) -> ctk.CTkLabel:
-        """Build the label for the attribute
-        :param parent: Parent of the label
-        :return: Completed label
-        """
-        attr_text = f'{self.name}: {self.value}'
-        attribute_label = ctk.CTkLabel(parent, text=attr_text, font=("Arial", 25),
-                                       fg_color="gray20", corner_radius=10)
-        return attribute_label
-
-    def build_option(self, parent) -> dict:
-        """Build the option for the attribute
-        :param parent: Parent of the option
-        :return: Completed option with all parts, and status. Will include frame, name, value, and remove button
-        """
-        if self.task is not None:
-            attr_frame = ctk.CTkFrame(parent, bg_color="gray14", fg_color="gray14")
-            attr_frame.columnconfigure(0, weight=1)
-            attr_frame.columnconfigure(1, weight=1)
-            attr_frame.columnconfigure(2, weight=1)
-
-            attr_name = ctk.CTkLabel(attr_frame, text=f'{self.name}', font=("Arial", 25),
-                                     fg_color="gray20", corner_radius=10, padx=10, pady=10)
-            attr_name.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
-            attr_value = ctk.CTkTextbox(attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
-                                        fg_color="royal blue", wrap="none")
-            # On Typing, update the attribute
-            attr_value.bind("<KeyRelease>", lambda: self.update_value_temp(attr_value.get("1.0", "end-1c")))
-            attr_value.insert('1.0', f'{self.value}')
-            attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
-
-            remove_button = ctk.CTkButton(attr_frame, text="Remove", font=("Arial", 25), width=80, bg_color="gray20")
-            remove_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
-            remove_button.bind("<Button-1>", lambda: self.task.remove_attribute(self.id))
-
-            return {
-                "type": "current",
-                "frame": attr_frame,
-                "name": attr_name,
-                "value": attr_value,
-                "remove": remove_button
-            }
-        else:
-            attr_frame = ctk.CTkFrame(parent, bg_color="gray14", fg_color="gray14")
-            attr_frame.columnconfigure(0, weight=1)
-            attr_frame.columnconfigure(1, weight=1)
-            attr_frame.columnconfigure(2, weight=1)
-
-            attr_name = ctk.CTkTextbox(attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
-                                       fg_color="gray20", wrap="none", corner_radius=10, )
-            attr_name.insert('1.0', f'{self.name}')
-            attr_name.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
-
-            attr_value = ctk.CTkTextbox(attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
-                                        fg_color="royal blue", wrap="none", corner_radius=10)
-            attr_value.insert('1.0', "value")
-            attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
-
-            add_button = ctk.CTkButton(attr_frame, text="Add", font=("Arial", 25), width=80, bg_color="gray20")
-            add_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
-            add_button.bind("<Button-1>", lambda: self.task.add_attribute(self.id, attr_value.get("1.0", "end-1c")))
-            return {
-                "type": "new",
-                "frame": attr_frame,
-                "name": attr_name,
-                "value": attr_value,
-                "add": add_button
-            }
-
-
-class Connection:
+class Connection(LoggingHandler):
     """The ZMQ Socket Connection to the server"""
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
         self.socket.connect("tcp://localhost:5555")
@@ -450,10 +592,11 @@ class Connection:
         return response
 
 # REMOVE
-# client = Client(Connection())
-# task = Task(client, 1, "Task 1", "2021-12-31", "This is a task", [], "open")
-# attribute = Attribute(client, 1, "Attribute 1", "Value 1", task)
-# task.attributes.append(attribute)
+c = Client(Connection())
+t = Task(c, 1, "Task 1", "2021-12-31", "This is a task", [], "open")
+attrib = Attribute(c, 1, "Attribute 1", "Value 1", t)
+t.attributes.append(attrib)
+print(t)
 # print(task.attributes)
 # attribute.remove()
 # print(task.attributes)
