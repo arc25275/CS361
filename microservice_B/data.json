@@ -46,7 +46,7 @@
                     "value": "Test!"
                 }
             ],
-            "status": "open"
+            "status": "closed"
         },
         {
             "id": 2,
@@ -70,7 +70,7 @@
                     "value": "value"
                 }
             ],
-            "status": "closed"
+            "status": "open"
         },
         {
             "id": 3,
@@ -78,7 +78,7 @@
             "date": "2024/01/01",
             "description": "New Description",
             "attributes": [],
-            "status": "open"
+            "status": "closed"
         },
         {
             "id": 4,

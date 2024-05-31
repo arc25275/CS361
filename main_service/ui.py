@@ -1,11 +1,11 @@
-import customtkinter as ctk
+import customtkinter as ctk  # Custom tkinter library. Better visuals by default.
 import tkinter as tk
-import zmq
-import json
-from typing import Self, Type
-import logging
+import zmq  # Communication with microservices
+import json  # Decoding and Encoding messages to microservices
+from typing import Self  # Added so functions could properly hint at returning self
+import logging  # Custom logger with easier to read colors and easier to control levels of information.
 import sys
-import argparse
+import argparse  # Used to enable debug logging
 # TODO: When functions are done, improve docstring with more info
 
 
@@ -43,6 +43,7 @@ class LoggingHandler:
         args = parser.parse_args()
         # Set up formatter and logger
 
+        self.custom_formatter = CustomFormatter()
         self.log = logging.getLogger(self.__class__.__name__)
         if self.log.hasHandlers():
             self.log.handlers.clear()
@@ -55,7 +56,7 @@ class LoggingHandler:
         else:
             ch.setLevel(logging.INFO)
             self.log.setLevel(logging.INFO)
-        ch.setFormatter(CustomFormatter())
+        ch.setFormatter(self.custom_formatter)
         self.log.addHandler(ch)
 
 
@@ -84,7 +85,7 @@ class AttributeRecord(LoggingHandler):
 
     def build_record_option(self, parent, task) -> dict:
         # tkLayout
-        #  attr_frame
+        #  attr_frame #[[attr_record_frame]]
         #  > attr_name
         #  > attr_value
         #  > add_button
@@ -126,10 +127,8 @@ class Attribute(AttributeRecord):
         self.name: str = name
         self.value: str = value
         self.task: Task = task
-        self.UI: dict = {
-            "label": self.build_label(self.task.UI["detail_view"]["frame"]) if self.task is not None else None,
-            "option": self.build_current_option(self.task.UI["detail_view"]["frame"]) if self.task is not None else None
-        }
+        self.label = self.build_label(self.task.detail_view["frame"]) if self.task is not None else None
+        self.option = self.build_current_option(self.task.detail_view["frame"]) if self.task is not None else None
         self.log.info(f"Attribute created: {self}")
 
     def __str__(self):
@@ -144,9 +143,9 @@ class Attribute(AttributeRecord):
         if response["code"] == 200:
             self.value = new_value
             if self.task is not None:
-                self.UI["label"].configure(text=f'{self.name}: {self.value}')
-                self.UI["option"]["value"].delete("1.0", "end")
-                self.UI["option"]["value"].insert("1.0", f'{self.value}')
+                self.label.configure(text=f'{self.name}: {self.value}')
+                self.option["value"].delete("1.0", "end")
+                self.option["value"].insert("1.0", f'{self.value}')
                 self.log.debug(f"Attribute updated to {self}")
             return self
         else:
@@ -192,7 +191,7 @@ class Attribute(AttributeRecord):
         :return: Completed option with all parts, and status. Will include frame, name, value, and remove button
         """
         # tkLayout
-        #  attr_frame
+        #  attr_frame #[[attr_frame]]
         #  > attr_name
         #  > attr_value
         #  > remove_button
@@ -228,20 +227,19 @@ class Attribute(AttributeRecord):
 class Task(LoggingHandler):
     """TODO TASK DOCSTRING"""
 
-    def __init__(self, client, task_id, name, date, description, status, *args, **kwargs):
+    def __init__(self, client, task_id, name, date, attributes, description, status, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.client: Client = client
         self.id: int = task_id
         self.name: str = name
         self.date: str = date
         self.description: str = description
-        self.attributes: list[Attribute] = []
+        self.attributes: list[Attribute] = attributes
+        self.assign_attributes()
         self.status: str = status
-        self.UI: dict = {
-            "list_item": self.build_list_item(self.client.UI["task_container"]),
-            "detail_view": self.build_detail_view(self.client.UI["detail_container"]),
-            "attribute_options": self.build_attribute_options(self.client.UI["detail_container"])
-        }
+        self.list_item = self.build_list_item(self.client.task_container)
+        self.detail_view = self.build_detail_view(self.client.detail_container)
+        # self.attribute_options = self.build_attribute_options(self.client.detail_container)
         self.log.info(f"Task created: {self}")
 
     def __str__(self):
@@ -305,14 +303,14 @@ class Task(LoggingHandler):
         :return: UI item
         """
         # tkLayout
-        #  button
+        #  button #[[button]]
         #  > name
         #  > filler
         #  > attributes
         button = ctk.CTkButton(parent, command=lambda index=self.id: self.client.change_task(index), text="", width=400,
                                height=100)
         if self.status == "closed":
-            button.configure(bg_color="gray20", fg_color="gray20")
+            button.configure(bg_color="gray14", fg_color="gray20")
 
         # Name for task title
         name = ctk.CTkLabel(button, text=f'{self.date} - {self.name}', font=("Arial", 20), padx=10, pady=10,
@@ -343,9 +341,20 @@ class Task(LoggingHandler):
 
     def build_detail_view(self, parent):
         """TODO:Build task detail view"""
-
-        # TODO MOVE TO CLIENT extra_space.tkraise()
-
+        # tkLayout
+        #  task_detail_frame #[[task_detail_frame]]
+        #  > name_frame
+        #    > name_label
+        #    > task_name
+        #  > complete_frame
+        #    > complete_text
+        #    > complete_box
+        #  > edit_button
+        #  > date
+        #  > attribute_label
+        #  > attributes
+        #  > description_label
+        #  > description
         # Create a new frame for the task detail view and add it to the list
         task_detail_frame = ctk.CTkFrame(parent, bg_color="gray14", fg_color="gray14", height=800)
 
@@ -362,7 +371,7 @@ class Task(LoggingHandler):
         name_frame.columnconfigure(1, weight=1)
 
         # Name Label
-        name_label = ctk.CTkLabel(name_frame, text=f'Task {self.id} - ', font=("Arial", 30))
+        name_label = ctk.CTkLabel(name_frame, text=f'Task {self.id+1} - ', font=("Arial", 30))
 
         # Name Textbox
         task_name = ctk.CTkTextbox(name_frame, font=("Arial", 30), border_width=0,
@@ -378,7 +387,7 @@ class Task(LoggingHandler):
         complete_text = ctk.CTkLabel(complete_frame, text="Complete ", font=("Arial", 30))
         task_var = ctk.BooleanVar(value=True if self.status == "closed" else False)
         complete_box = ctk.CTkCheckBox(complete_frame, variable=task_var,
-                                       command=lambda: toggle_active(self.id),
+                                       command=lambda: self.client.toggle_active(self.id),
                                        text="",
                                        checkbox_width=30,
                                        checkbox_height=30)
@@ -387,8 +396,8 @@ class Task(LoggingHandler):
         complete_frame.grid(column=1, row=0, sticky="nsw", pady=10, padx=10)
 
         # Editing Button
-        edit_button = ctk.CTkButton(task_detail_frame, text="Edit", command=lambda: edit_task(self.id),
-                                    font=("Arial", 30), width=80, bg_color="gray20")
+        edit_button = ctk.CTkButton(task_detail_frame, text="Edit", command=lambda: self.client.edit_task(self.id),
+                                    font=("Arial", 30), width=80, bg_color="gray14")
         edit_button.grid(column=2, row=0, sticky="nsw", pady=10)
 
         # Date
@@ -405,9 +414,10 @@ class Task(LoggingHandler):
         # Attributes
         max_j = 0
         for j, attr in enumerate(self.attributes):
-            attr.UI["label"].grid(row=3 + j, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
-            task_detail_frame.rowconfigure(index=3 + j, weight=1, uniform="row")
-            max_j = j
+            if attr.label is not None:
+                attr.label.grid(row=3 + j, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+                task_detail_frame.rowconfigure(index=3 + j, weight=1, uniform="row")
+                max_j = j
 
         # Description Label
         description_label = ctk.CTkLabel(task_detail_frame, text="Description", font=("Arial", 30), padx=15)
@@ -445,8 +455,18 @@ class Task(LoggingHandler):
         # Update value when closed
         pass
 
+    def assign_attributes(self) -> bool:
+        """Assign attributes to task
+        :return: True if successful, False if not
+        """
+        for attr in self.attributes:
+            attr.task = self
+            self.log.debug(f"Attribute {attr.id} assigned to task with value {attr.value}")
+        return True
+
     # Manage Attributes
     def create_attribute(self, name: str, value: str) -> Attribute | None:
+        # TODO: Update options
         """Create an entirely new attribute, and add it to the task
         :param name: Name to be used
         :param value: Value to be used
@@ -468,6 +488,7 @@ class Task(LoggingHandler):
             return None
 
     def add_attribute(self, attr_id: int, value: str) -> Attribute | None:
+        # TODO: Update options
         """Add an existing attribute to the task
         :param attr_id: ID of the attribute to be added
         :param value: New value for the attribute
@@ -484,6 +505,7 @@ class Task(LoggingHandler):
             return None
 
     def remove_attribute(self, attr_id: int) -> bool:
+        # TODO: Update options
         """Remove attribute from task, and delete it from memory
         :param attr_id: ID of the attribute to be removed
         :return: True if successful, False if not
@@ -505,6 +527,7 @@ class Task(LoggingHandler):
             return False
 
     def update_attribute(self, attr_id, value):
+        # TODO: Update options
         """Update attribute value
         :param attr_id: ID of the attribute to be updated
         :param value: New value for the attribute
@@ -519,15 +542,22 @@ class Task(LoggingHandler):
 
 # Scrolling events
 def scroll(event, widget):
-    widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    y_steps = 5
+    if event.num == 4:
+        y_steps *= -1
+    widget.yview_scroll(y_steps, "units")
 
 
 def final_scroll(event, widget, func):
-    widget.bind_all("<MouseWheel>", func)
+    # Apparently tkinter uses events for Windows and Linux...
+    # For windows, to be able to scroll you would just set one, and have it be <MouseWheel>
+    widget.bind_all("<Button-4>", func)
+    widget.bind_all("<Button-5>", func)
 
 
 def stop_scroll(event, widget):
-    widget.unbind_all("<MouseWheel>")
+    widget.bind_all("<Button-4>")
+    widget.bind_all("<Button-5>")
 
 
 class Client(LoggingHandler):
@@ -536,27 +566,29 @@ class Client(LoggingHandler):
     def __init__(self, connection, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.root = self.build_root(ctk.CTk())
+        self.connection: Connection = connection
         self.tasks: list[Task] = []
         self.attribute_records: list[AttributeRecord] = []
-        self.connection: Connection = connection
-        self.UI = {
-            "root": self.root,
-            "menu_bar": self.build_menu(),
-            "task_container": self.build_task_list_container(),
-            "detail_container": self.build_detail_container(),
-        }
+        self.menu_bar = self.build_menu(),
+        self.task_container = self.build_task_list_container()
+        self.extra_space, self.detail_container = self.build_detail_container()
+        self.help_page = None
         self.log.info("Client created")
         self.build_initial_ui()
-
 
     # Build default UI
     def build_initial_ui(self):
         """TODO:Build containers, task list, details, and help page"""
+        # tkLayout
+        #  root
+        #  > menu_bar [[menu_bar]]
+        #  > task_container [[task_container]]
+        #  > detail_container [[detail_container]]
         self.fetch_tasks()
         self.fetch_attributes()
         self.build_task_list()
         self.build_task_details()
-        self.UI["help_page"] = self.build_help_page()
+        self.help_page = self.build_help_page()
         self.log.info("Initial UI built")
         self.root.update()
         self.root.mainloop()
@@ -565,6 +597,11 @@ class Client(LoggingHandler):
         """Create the menu bar and buttons on it.
         :return: tk Object for menu bar and all buttons.
         """
+        # tkLayout #[[menu_bar]]
+        #  menu_bar
+        #  > sorting_button
+        #  > add_task_button
+        #  > help_button
         # Add menu
         menu_bar = ctk.CTkFrame(self.root)
         menu_bar.grid(row=0, column=0, columnspan=4, sticky='nsew')
@@ -613,9 +650,10 @@ class Client(LoggingHandler):
         :return: The container for the task list
         """
         # tkLayout
-        #  task_container
+        #  task_container #[[task_container]]
         #  > left_canvas
         #    > task_list_container
+        #      > button[] [[button]]
         #  > left_scrollbar
 
         task_container = ctk.CTkFrame(self.root)
@@ -631,7 +669,7 @@ class Client(LoggingHandler):
         left_scrollbar.grid(row=0, column=1, sticky='nsew')
 
         left_canvas['yscrollcommand'] = left_scrollbar.set
-        left_canvas['yscrollincrement'] = 30
+        left_canvas['yscrollincrement'] = 7
         left_canvas.columnconfigure(0, weight=1)
         left_canvas.rowconfigure(0, weight=1)
 
@@ -658,6 +696,12 @@ class Client(LoggingHandler):
         """Build a scrollable container for the task details
         :return: The container for the task details
         """
+        # tkLayout
+        #  detail_container #[[detail_container]]
+        #  > right_canvas
+        #    > task_detail_container
+        #      > task_detail_frame[] [[task_detail_frame]]
+        #  > right_scrollbar
         detail_container = ctk.CTkFrame(self.root, bg_color="gray14", fg_color="gray14")
         detail_container.grid(row=1, column=1, sticky='nsew')
         detail_container.columnconfigure(0, weight=1)
@@ -671,7 +715,7 @@ class Client(LoggingHandler):
         right_scrollbar.grid(row=0, column=1, sticky='nsew')
 
         right_canvas['yscrollcommand'] = right_scrollbar.set
-        right_canvas['yscrollincrement'] = 30
+        right_canvas['yscrollincrement'] = 7
         right_canvas.columnconfigure(0, weight=1)
         right_canvas.rowconfigure(0, weight=1)
 
@@ -696,12 +740,12 @@ class Client(LoggingHandler):
         extra_space = ctk.CTkLabel(task_detail_container, text="", bg_color="gray14", fg_color="gray14", height=500)
         extra_space.grid(row=0, rowspan=3, column=0, columnspan=4, sticky="nsew")
 
-        return task_detail_container
+        return extra_space, task_detail_container
 
     def build_help_page(self) -> ctk.CTkFrame:
         """Build the help page for the application. It has two parts, one for new features, and one for help."""
         # Move text to file
-        help_page = ctk.CTkFrame(self.UI["detail_container"], bg_color="gray14", fg_color="gray14")
+        help_page = ctk.CTkFrame(self.detail_container, bg_color="gray14", fg_color="gray14")
         help_page.grid(row=1, column=0, columnspan=4, sticky='nsew')
         help_page.columnconfigure(0, weight=1)
         help_page.rowconfigure(0, weight=1)
@@ -709,6 +753,7 @@ class Client(LoggingHandler):
         help_page.rowconfigure(2, weight=1)
         help_page.rowconfigure(3, weight=2)
 
+        #TODO: Update New Content
         info_text = '''View
         - You are now able to view all of your tasks on the main page, 
           and you can click on a task to show more of its details
@@ -737,7 +782,8 @@ class Client(LoggingHandler):
         - To edit an attribute, click the "Attributes" button on the task detail view.
         - You can change the value of the attribute.
         - To remove an attribute, click the "Remove" button next to the attribute.
-        - To add an attribute, click the "Add" button next to the attribute, which can be an existing one, or brand new.
+        - To add an attribute, click the "Add" button next to the attribute, 
+          which can be an existing one, or brand new.
         - To save your changes, click the "Save" button on the task detail view.
         '''
 
@@ -747,7 +793,7 @@ class Client(LoggingHandler):
                                  height=2)
         new_title.grid(row=0, column=0, sticky="nsw", padx=10, pady=10)
         new_info = ctk.CTkTextbox(help_page, font=("Arial", 20), bg_color="gray14", fg_color="gray14",
-                                  width=700, spacing1=10, height=400, activate_scrollbars=False)
+                                  width=800, spacing1=10, height=400, activate_scrollbars=False)
         new_info.insert('1.0', info_text)
         new_info.configure(state="disabled")
         new_info.grid(row=1, column=0, sticky="nsw", padx=10)
@@ -756,7 +802,7 @@ class Client(LoggingHandler):
                                   height=2)
         help_title.grid(row=2, column=0, sticky="nsw", padx=10, pady=10)
         help_info = ctk.CTkTextbox(help_page, font=("Arial", 20), bg_color="gray14", fg_color="gray14",
-                                   width=700, spacing1=10, height=1000, activate_scrollbars=False)
+                                   width=800, spacing1=10, height=1000, activate_scrollbars=False, wrap="word")
         help_info.insert('1.0', help_text)
         help_info.configure(state="disabled")
         help_info.grid(row=3, column=0, sticky="nsw", padx=10)
@@ -764,11 +810,17 @@ class Client(LoggingHandler):
         return help_page
 
     def build_task_list(self):
-        """TODO:Build task list for each task. WIP RIGHT NOW"""
-        for i, task in enumerate(self.tasks):
-            task.UI["list_item"]["button"].grid(row=i, column=0, sticky="nsw", pady=10, padx=10)
-            self.UI["task_container"].rowconfigure(i, weight=1, uniform="row")
+        """Build the task list on the left side of the screen
+        """
+        open_tasks = [task for task in self.tasks if task.status == "open"]
+        closed_tasks = [task for task in self.tasks if task.status == "closed"]
+
+        tasks = open_tasks + closed_tasks
+        for i, task in enumerate(tasks):
+            task.list_item["button"].grid(row=i, column=0, sticky="nsw", pady=10, padx=10)
+            self.task_container.rowconfigure(i, weight=1, uniform="row")
         self.log.info(f"Built {len(self.tasks)} tasks in task list")
+
 
     def build_task_details(self):
         """TODO:Grid task details for each task"""
@@ -786,11 +838,13 @@ class Client(LoggingHandler):
         response = self.connection.get("tasks/all")
         if response["code"] == 200:
             for task in response["data"]:
-                new_task = Task(self, task["id"], task["name"], task["date"], task["description"], task["status"])
+                attr_list = []
                 for attr in task["attributes"]:
-                    new_attribute = Attribute(self, attr["id"], attr["name"], attr["value"], new_task)
-                    new_task.attributes.append(new_attribute)
+                    attr_list.append(Attribute(self, attr["id"], attr["name"], attr["value"]))
+                new_task = Task(self, task["id"], task["name"], task["date"], attr_list, task["description"], task["status"])
+                new_task.assign_attributes()
                 self.tasks.append(new_task)
+
             self.log.info(f"Fetched {len(self.tasks)} tasks from server")
             return True
         else:
@@ -840,14 +894,31 @@ class Client(LoggingHandler):
         """TODO:Delete task from server and UI"""
         pass
 
-    def toggle_active(self, n):
+    def toggle_active(self, n: int):
         """TODO:Toggle task status"""
         # Change checkmark and colors, and task status
-        pass
+        task = self.tasks[n]
+        task.toggle_active()
+        if task.status == "open":
+            task.list_item["button"].configure(fg_color="#1F6AA5")
+            task.list_item["filler"].configure(text="", font=("Arial", 20), fg_color="#1F6AA5")
+            task.list_item["name"].configure(fg_color="#1F6AA5")
+            task.list_item["attributes"].configure(fg_color="#1F6AA5")
+        else:
+            task.list_item["button"].configure(bg_color="gray14", fg_color="gray20")
+            task.list_item["filler"].configure(text="✓", font=("Arial", 20), bg_color="gray20", fg_color="gray20")
+            task.list_item["name"].configure(bg_color="gray20", fg_color="gray20")
+            task.list_item["attributes"].configure(bg_color="gray20", fg_color="gray20")
+        # Rebuild list
+        self.build_task_list()
+        self.log.info(f"Task {n} toggled to {task.status}")
 
-    def change_task(self, n):
-        """TODO:Change the task being viewed"""
-        pass
+    def change_task(self, n: int):
+        """Change the task that is being viewed
+        :param n: ID of the task to be viewed
+        """
+        self.extra_space.tkraise()
+        self.tasks[n].detail_view["frame"].tkraise()
 
     def toggle_help(self):
         """TODO:Toggle help page"""
@@ -925,12 +996,13 @@ class Connection(LoggingHandler):
 
         return response
 
+
 # REMOVE
 c = Client(Connection())
-t = Task(c, 1, "Task 1", "2021-12-31", "This is a task", [], "open")
-attrib = Attribute(c, 1, "Attribute 1", "Value 1", t)
-t.attributes.append(attrib)
-print(t)
+# t = Task(c, 1, "Task 1", "2021-12-31", "This is a task", [], "open")
+# attrib = Attribute(c, 1, "Attribute 1", "Value 1", t)
+# t.attributes.append(attrib)
+# print(t)
 # print(task.attributes)
 # attribute.remove()
 # print(task.attributes)

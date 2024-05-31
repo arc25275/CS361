@@ -76,12 +76,10 @@ while True:
                                     task_index = int(spec) - 1
                                     attribute_index = int(key) - 1
                                     server_data["tasks"][task_index]["attributes"][attribute_index].update(incoming_data)
-                                    response = 200
                                 case "":
                                     task_index = int(spec) - 1
                                     # Get the existing task
                                     server_data["tasks"][task_index].update(incoming_data)
-                                    response = 200
                                 case _:
                                     response["code"] = 400
                         case _:
