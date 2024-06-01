@@ -6,6 +6,9 @@ It is built using Python and [CustomTkinter](https://customtkinter.tomschimansky
 At this point in the project, scrolling via the scrollwheel may only work on Linux, due to how TKinter implements the button events differently on Linux/MacOS and Windows. 
 You can still scroll via the scrollbars that show on screen.
 
+- [] Add more info about assignment and what the project is
+- [] UML between microservices
+
 ## Structure
 
 This app is divided into one main service, and 4 other microservices. 
