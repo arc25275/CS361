@@ -18,7 +18,7 @@ while True:
     path = message["path"]
     path = path.split("/")
     location = path[0]
-    spec = path[1]
+    spec = path[1] if len(path) > 1 else ""
     key = path[2] if len(path) > 2 else ""
 
     incoming_data = message["data"]
@@ -28,13 +28,14 @@ while True:
     response = {"code": 200, "message": "", "data": None}
     match action:
         case "get":
+            print(f"get/{location}/{spec}")
             match location:
                 case "tasks":
                     match spec:
                         case "all":
                             response["data"] = server_data["tasks"]
                         case spec if spec.isdigit():
-                            response["data"] = server_data["tasks"][int(spec)-1]
+                            response["data"] = server_data["tasks"][int(spec)]
                         case _:
                             response["code"] = 400
                 case "attributes":
@@ -42,9 +43,9 @@ while True:
                         case "all":
                             response["data"] = server_data["attributes"]
                         case spec if spec.isdigit():
-                            response["data"] = server_data["attributes"][int(spec) - 1]
+                            response["data"] = server_data["attributes"][int(spec)]
         case "post":
-            print("Post")
+            print(f"post/{location}/{spec}/{key}")
             match location:
                 case "tasks":
                     match spec:
@@ -53,7 +54,7 @@ while True:
                         case spec if spec.isdigit():
                             match key:
                                 case "attributes":
-                                    server_data["tasks"][int(spec)-1]["attributes"].append(incoming_data)
+                                    server_data["tasks"][int(spec)]["attributes"].append(incoming_data)
                                 case _:
                                     response["code"] = 400
                         case _:
@@ -64,7 +65,7 @@ while True:
                 case _:
                     response["code"] = 400
         case "put":
-            print("Put")
+            print(f"put/{location}/{spec}/{key}")
             match location:
                 case "tasks":
                     match spec:
@@ -73,11 +74,11 @@ while True:
                         case spec if spec.isdigit():
                             match key:
                                 case "attributes":
-                                    task_index = int(spec) - 1
-                                    attribute_index = int(key) - 1
+                                    task_index = int(spec)
+                                    attribute_index = [i["id"] for i in server_data["tasks"][task_index]["attributes"]].index(incoming_data["id"])
                                     server_data["tasks"][task_index]["attributes"][attribute_index].update(incoming_data)
                                 case "":
-                                    task_index = int(spec) - 1
+                                    task_index = int(spec)
                                     # Get the existing task
                                     server_data["tasks"][task_index].update(incoming_data)
                                 case _:
@@ -85,7 +86,7 @@ while True:
                         case _:
                             response["code"] = 400
         case "delete":
-            print("Delete")
+            print(f"delete/{location}/{spec}/{key}")
             match location:
                 case "tasks":
                     match spec:
@@ -94,11 +95,11 @@ while True:
                         case spec if spec.isdigit():
                             match key:
                                 case "attributes":
-                                    task_index = int(spec) - 1
+                                    task_index = int(spec)
                                     res = list(filter(lambda i: i['id'] != incoming_data["id"], server_data["tasks"][task_index]["attributes"]))
                                     server_data["tasks"][task_index]["attributes"] = res
                                 case "":
-                                    task_index = int(spec) - 1
+                                    task_index = int(spec)
                                     del server_data["tasks"][task_index]
                         case _:
                             response["code"] = 400
@@ -107,7 +108,7 @@ while True:
                         case "all":
                             response["code"] = 405
                         case spec if spec.isdigit():
-                            attribute_index = int(spec) - 1
+                            attribute_index = int(spec)
                             del server_data["attributes"][attribute_index]
                         case _:
                             response["code"] = 400
@@ -123,6 +124,10 @@ while True:
             response["message"] = "Not Found"
         case 405:
             response["message"] = "Method Not Allowed"
+    server_data["tasks"] = sorted(server_data["tasks"], key=lambda i: i["id"])
+    for task in server_data["tasks"]:
+        task["attributes"] = sorted(task["attributes"], key=lambda i: i["id"])
+    server_data["attributes"] = sorted(server_data["attributes"], key=lambda i: i["id"])
     file = open("data.json", "w")
     json.dump(server_data, file, indent=4)
     file.close()

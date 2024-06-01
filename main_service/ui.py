@@ -66,6 +66,7 @@ class AttributeRecord(LoggingHandler):
         self.client: Client = client
         self.id: int = attr_id
         self.name: str = name
+        self.record = None
 
     def __str__(self):
         return f"ID:{self.id} ({self.name})"
@@ -104,9 +105,9 @@ class AttributeRecord(LoggingHandler):
         attr_value.insert('1.0', "value")
         attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
 
-        add_button = ctk.CTkButton(attr_frame, text="Add", font=("Arial", 25), width=80, bg_color="gray20")
+        add_button = ctk.CTkButton(attr_frame, text="Add", font=("Arial", 25), width=80, bg_color="gray20", command=lambda: task.add_attribute(self.id, attr_value.get("1.0", "end-1c")))
         add_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
-        add_button.bind("<Button-1>", lambda: task.add_attribute(self.id, attr_value.get("1.0", "end-1c")))
+        # add_button.bind("<Button-1>", lambda: task.add_attribute(self.id, attr_value.get("1.0", "end-1c")))
         option = {
             "type": "new",
             "frame": attr_frame,
@@ -115,6 +116,7 @@ class AttributeRecord(LoggingHandler):
             "add": add_button
         }
         self.log.debug(f"Existing attribute option built with [{self}]: {option}")
+        self.record = option
         return option
 
 
@@ -128,7 +130,7 @@ class Attribute(AttributeRecord):
         self.value: str = value
         self.task: Task = task
         self.label = self.build_label(self.task.detail_view["frame"]) if self.task is not None else None
-        self.option = self.build_current_option(self.task.detail_view["frame"]) if self.task is not None else None
+        self.option = self.build_current_option(self.task.options_frame) if self.task is not None else None
         self.log.info(f"Attribute created: {self}")
 
     def __str__(self):
@@ -165,9 +167,11 @@ class Attribute(AttributeRecord):
         if self.task is None:
             self.log.warning("No task to remove attribute from")
             return False
+
+        # Remove the attribute from the task
         response = self.client.connection.delete(f"tasks/{self.task.id}/attributes/", {"id": self.id})
         if response["code"] == 200:
-            self.task.attributes.remove(self)
+            self.task.attributes = [attr for attr in self.task.attributes if attr.id != self.id]
             self.log.debug(f"Attribute removed from task: {self}")
             return True
         else:
@@ -181,7 +185,7 @@ class Attribute(AttributeRecord):
         """
         attr_text = f'{self.name}: {self.value}'
         attribute_label = ctk.CTkLabel(parent, text=attr_text, font=("Arial", 25),
-                                       fg_color="gray20", corner_radius=10)
+                                       fg_color="gray20", corner_radius=10, height=50, padx=10, pady=10)
         self.log.debug(f"Attribute label built with text [{attr_text}]: {attribute_label}")
         return attribute_label
 
@@ -195,24 +199,24 @@ class Attribute(AttributeRecord):
         #  > attr_name
         #  > attr_value
         #  > remove_button
-        attr_frame = ctk.CTkFrame(parent, bg_color="gray14", fg_color="gray14")
+        attr_frame = ctk.CTkFrame(parent, bg_color="gray14", fg_color="gray14", height=50)
         attr_frame.columnconfigure(0, weight=1)
         attr_frame.columnconfigure(1, weight=1)
         attr_frame.columnconfigure(2, weight=1)
 
         attr_name = ctk.CTkLabel(attr_frame, text=f'{self.name}', font=("Arial", 25),
-                                 fg_color="gray20", corner_radius=10, padx=10, pady=10)
+                                 fg_color="gray20", corner_radius=10, padx=10, pady=10, height=50)
         attr_name.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
         attr_value = ctk.CTkTextbox(attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
                                     fg_color="royal blue", wrap="none")
         # On Typing, update the attribute
-        attr_value.bind("<KeyRelease>", lambda: self.update_value_temp(attr_value.get("1.0", "end-1c")))
+        attr_value.bind("<KeyRelease>", lambda val: self.update_value_temp(attr_value.get("1.0", "end-1c")))
         attr_value.insert('1.0', f'{self.value}')
         attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
 
-        remove_button = ctk.CTkButton(attr_frame, text="Remove", font=("Arial", 25), width=80, bg_color="gray20")
+        remove_button = ctk.CTkButton(attr_frame, text="Remove", font=("Arial", 25), width=80, bg_color="gray20", command=lambda: self.task.remove_attribute(self.id))
         remove_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
-        remove_button.bind("<Button-1>", lambda: self.task.remove_attribute(self.id))
+        # remove_button.bind("<Button-1>", lambda: self.task.remove_attribute(self.id))
         option = {
             "type": "current",
             "frame": attr_frame,
@@ -235,11 +239,16 @@ class Task(LoggingHandler):
         self.date: str = date
         self.description: str = description
         self.attributes: list[Attribute] = attributes
+        self.options_frame = None
         self.assign_attributes()
         self.status: str = status
         self.list_item = self.build_list_item(self.client.task_container)
         self.detail_view = self.build_detail_view(self.client.detail_container)
-        # self.attribute_options = self.build_attribute_options(self.client.detail_container)
+        self.options_frame = ctk.CTkFrame(self.detail_view["frame"], bg_color="gray14", fg_color="gray14")
+        self.assign_attributes()
+        self.attribute_options = self.build_attribute_options(self.options_frame)
+        self.options_open = False
+        self.editing = False
         self.log.info(f"Task created: {self}")
 
     def __str__(self):
@@ -259,6 +268,13 @@ class Task(LoggingHandler):
             for key, value in new_data.items():
                 if self.__dict__[key] != value:
                     self.__dict__[key] = value
+                    if key == "name":
+                        self.list_item["name"].configure(text=f'{self.date} - {self.name}')
+                    if key == "date":
+                        self.list_item["name"].configure(text=f'{self.date} - {self.name}')
+                    if key == "attributes":
+                        attr_list = ", ".join(attr.value for attr in self.attributes)
+                        self.list_item["attributes"].configure(text=f'{attr_list}')
             self.log.debug(f"Task updated to {self}")
             return self
         else:
@@ -409,51 +425,134 @@ class Task(LoggingHandler):
         date.grid(row=1, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
 
         # Attribute Label
-        attribute_label = ctk.CTkButton(task_detail_frame, text="Attributes", font=("Arial", 30), command=lambda: self.client.open_attribute_options(self.id), state="disabled", bg_color="gray14", fg_color="gray14")
+        attribute_label = ctk.CTkButton(task_detail_frame, text="Attributes", font=("Arial", 30),
+                                        command=lambda: self.client.toggle_attribute_options(self.id),
+                                        state="disabled", bg_color="gray14", fg_color="gray14", text_color="white", text_color_disabled="white")
         attribute_label.grid(row=2, column=0, columnspan=3, sticky="nsw", pady=10, padx=15)
         # Attributes
-        max_j = 0
-        for j, attr in enumerate(self.attributes):
-            if attr.label is not None:
-                attr.label.grid(row=3 + j, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
-                task_detail_frame.rowconfigure(index=3 + j, weight=1, uniform="row")
-                max_j = j
-
+        max_j = 6
+        for attr in self.attributes:
+            if attr.label is None:
+                attr.label = attr.build_label(task_detail_frame)
+            attr.label.grid(row=max_j, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+            max_j += 1
+        attribute_row = max_j
+        max_j += 50  # This gives space for new attributes. It feels a bit messy, but right now its the best way to do it.
         # Description Label
         description_label = ctk.CTkLabel(task_detail_frame, text="Description", font=("Arial", 30), padx=15)
-        description_label.grid(row=max_j + 4, column=0, columnspan=3, sticky="nsw")
+        description_label.grid(row=max_j, column=0, columnspan=3, sticky="nsw")
+        max_j += 1
         # Description
         description = ctk.CTkTextbox(task_detail_frame, font=("Arial", 20), padx=15, wrap='word', width=800,
                                      height=300, spacing2=10)
         description.insert('1.0', self.description)
         description.configure(state="disabled")
-        description.grid(row=max_j + 5, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
+        description.grid(row=max_j, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
+        max_j += 1
 
         # Create a Scrollbar and attach it to the Text widget
         scrollbar = ctk.CTkScrollbar(task_detail_frame, command=description.yview)
-        scrollbar.grid(row=max_j + 5, column=3, sticky='nsew')
+        scrollbar.grid(row=max_j, column=3, sticky='nsew')
+        max_j += 1
         description['yscrollcommand'] = scrollbar.set
 
-        task_detail_frame.rowconfigure(index=max_j + 4, weight=1)
-        task_detail_frame.rowconfigure(index=max_j + 5, weight=1)
+        task_detail_frame.rowconfigure(index=max_j - 1, weight=1)
+        task_detail_frame.rowconfigure(index=max_j, weight=1)
 
-        task_detail_frame.grid(row=1, column=1, columnspan=3, sticky='new')
+
         self.log.debug(f"Task detail view built: {task_detail_frame}")
         return {
+            "attr_row": attribute_row,
             "name": task_name,
             "date": date,
             "description": description,
-            "complete": task_var,
+            "complete": complete_box,
             "edit": edit_button,
             "attributes": attribute_label,
             "frame": task_detail_frame
         }
 
-    def build_attribute_options(self, parent):
+    def build_attribute_options(self, attr_options_frame):
         """TODO:Build attribute options for task. Hide below task details"""
-        # Grid frames for current attributes, existing attributes, and new attributes
-        # Update value when closed
-        pass
+
+        attr_options_frame.columnconfigure(0, weight=1)
+        attr_options_frame.columnconfigure(1, weight=1)
+        attr_options_frame.columnconfigure(2, weight=1)
+
+        # Current Attr Label
+        current_attr_label = ctk.CTkLabel(attr_options_frame, text="Current Attributes", font=("Arial", 30), padx=15)
+        current_attr_label.grid(row=0, column=0, sticky="nsw")
+
+        current_attr_options = []
+        # Current Attributes
+        max_i = 1
+        for attr in self.attributes:
+            option = attr.option
+            option["frame"].grid(row=max_i, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+            current_attr_options.append({attr.id: option})
+            max_i += 1
+        current_row = max_i + 1
+        max_i += 50
+
+        # Find existing attributes that aren't already in the task
+        existing_attributes = []
+        for i, attr in enumerate(self.client.attribute_records):
+            if attr.id not in [a.id for a in self.attributes]:
+                existing_attributes.append(attr)
+
+        existing_attr_label = None
+        existing_attr_options = []
+
+        # Existing Attr Label
+        if len(existing_attributes) > 0:
+            existing_attr_label = ctk.CTkLabel(attr_options_frame, text="Existing Attributes", font=("Arial", 30),
+                                               padx=15)
+            existing_attr_label.grid(row=max_i, column=0, sticky="nsw")
+            max_i += 1
+            # Existing Attributes
+            for attr in existing_attributes:
+                option = attr.build_record_option(attr_options_frame, self)
+                option["frame"].grid(row=max_i, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+                existing_attr_options.append({attr.id: option})
+                max_i += 1
+        existing_row = max_i + 1
+        max_i += 50
+
+        # New Attr Label (Just 2 blank textboxes and a button to add. If one is added, add another)
+        new_attr_label = ctk.CTkLabel(attr_options_frame, text="New Attributes", font=("Arial", 30), padx=15)
+        new_attr_label.grid(row=max_i, column=0, sticky="nsw")
+        max_i += 1
+        new_attr_frame = ctk.CTkFrame(attr_options_frame, bg_color="gray14", fg_color="gray14")
+        new_attr_frame.grid(row=max_i, column=0, columnspan=3, sticky="nsw")
+        max_i += 1
+        new_attr_frame.columnconfigure(0, weight=1)
+        new_attr_frame.columnconfigure(1, weight=1)
+        new_attr_frame.columnconfigure(2, weight=1)
+        new_attr_name = ctk.CTkTextbox(new_attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
+                                       fg_color="royal blue", wrap="none", corner_radius=10)
+        new_attr_name.insert('1.0', "name")
+        new_attr_name.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
+        new_attr_value = ctk.CTkTextbox(new_attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
+                                        fg_color="royal blue", wrap="none", corner_radius=10)
+        new_attr_value.insert('1.0', "value")
+        new_attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+        add_button = ctk.CTkButton(new_attr_frame, text="Add", font=("Arial", 25), width=80, bg_color="gray14",
+                                   corner_radius=10)
+        add_button.grid(row=0, column=2, sticky="nsw")
+        add_button.bind("<Button-1>", lambda event: self.create_attribute(new_attr_name.get("1.0", "end-1c"),
+                                                                  new_attr_value.get("1.0", "end-1c")))
+        return {
+            "current_row": current_row,
+            "current_label": current_attr_label,
+            "current_options": current_attr_options,
+            "existing_row": existing_row,
+            "existing_label": existing_attr_label,
+            "existing_options": existing_attr_options,
+            "new": new_attr_label,
+            "new_name": new_attr_name,
+            "new_value": new_attr_value,
+            "frame": attr_options_frame
+        }
 
     def assign_attributes(self) -> bool:
         """Assign attributes to task
@@ -461,6 +560,8 @@ class Task(LoggingHandler):
         """
         for attr in self.attributes:
             attr.task = self
+            if self.options_frame is not None and attr.option is None:
+                attr.option = attr.build_current_option(self.options_frame)
             self.log.debug(f"Attribute {attr.id} assigned to task with value {attr.value}")
         return True
 
@@ -480,6 +581,17 @@ class Task(LoggingHandler):
 
         if task_response["code"] == 200 and attr_response["code"] == 200:
             self.attributes.append(new_attribute)
+            # Add label to task detail view
+            new_attribute.label.grid(row=self.detail_view["attr_row"], column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+            self.detail_view["attr_row"] += 1
+            # Add to current options
+            self.attribute_options["current_options"].append(new_attribute.option)
+            new_attribute.option["frame"].grid(row=self.attribute_options["current_row"], column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+            self.attribute_options["current_row"] += 1
+            # Clear the add attribute textboxes
+            self.attribute_options["new_name"].delete("1.0", "end")
+            self.attribute_options["new_value"].delete("1.0", "end")
+
             self.log.info(f"Attribute created and added to task {self.id}: {new_attribute}")
             return new_attribute
         else:
@@ -488,34 +600,76 @@ class Task(LoggingHandler):
             return None
 
     def add_attribute(self, attr_id: int, value: str) -> Attribute | None:
-        # TODO: Update options
-        """Add an existing attribute to the task
+        """Add an existing attribute to the task, and update options.
         :param attr_id: ID of the attribute to be added
         :param value: New value for the attribute
         :return: Newly added attribute
         """
+        ids = [attr.id for attr in self.attributes]
+        if attr_id in ids:
+            self.log.warning(f"Attribute {attr_id} already exists in task {self.id}")
+            return None
         name = self.client.attribute_records[attr_id].name
         response = self.client.connection.post(f"tasks/{self.id}/attributes", {"id": attr_id, "name": name, "value": value})
         if response["code"] == 200:
+            # Create new attribute
             new_attribute = Attribute(self.client, attr_id, name, value, self)
             self.attributes.append(new_attribute)
+
+            # Add to current options
+            new_attribute.option["frame"].grid(row=self.attribute_options["current_row"], column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+            self.attribute_options["current_row"] += 1
+            self.attribute_options["current_options"].append({attr_id: new_attribute.option})
+
+            # Get existing option based off of key in dict
+            existing_option = next((opt for opt in self.attribute_options["existing_options"] if list(opt.keys())[0] == attr_id), None)
+            if existing_option is not None:
+                # Remove from existing options so it can't be duplicated
+                self.attribute_options["existing_options"].remove(existing_option)
+                existing_option[attr_id]["frame"].destroy()
+
+
+
+            # Add attribute to task detail view
+            new_attribute.label.grid(row=self.detail_view["attr_row"], column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+            self.detail_view["attr_row"] += 1
+            self.log.info(f"Attribute added to task {self.id}: {new_attribute}")
+
             return new_attribute
         else:
             print(f"Error adding attribute: {response["code"]} : {response["message"]}")
             return None
 
     def remove_attribute(self, attr_id: int) -> bool:
-        # TODO: Update options
-        """Remove attribute from task, and delete it from memory
+        """Remove attribute from task, and delete it from memory. Update options as well.
         :param attr_id: ID of the attribute to be removed
         :return: True if successful, False if not
         """
         # Get attribute based on list of attributes
-        attribute = self.attributes[attr_id]
+        attribute = next((attr for attr in self.attributes if attr.id == attr_id), None)
+        print(attribute.id)
+        attr_id = attribute.id
         response = self.client.connection.delete(f"tasks/{self.id}/attributes", {"id": attribute.id})
         if response["code"] == 200:
+            # Remove attribute from task
+            attribute.label.grid_forget()
             self.attributes.remove(attribute)
+            self.attribute_options["current_options"].remove({attribute.id: attribute.option})
+            # Fix the attribute options
+            attribute.option["frame"].destroy()
+
+            # Finally, get rid of attribute
             removed = attribute.remove()
+
+            # Add back a record option
+            record = self.client.attribute_records[attr_id]
+            record.build_record_option(self.options_frame, self)
+            self.attribute_options["existing_row"] += 1
+            record.record["frame"].grid(row=self.attribute_options["existing_row"], column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
+
+            # Add back to existing options, so it can be picked again
+            self.attribute_options["existing_options"].append({attr_id: record.record})
+
             if removed:
                 self.log.info(f"Attribute removed from task {self.id}: {attribute}")
                 del attribute
@@ -527,14 +681,18 @@ class Task(LoggingHandler):
             return False
 
     def update_attribute(self, attr_id, value):
-        # TODO: Update options
         """Update attribute value
         :param attr_id: ID of the attribute to be updated
         :param value: New value for the attribute
         """
+        # Get attribute
         attribute = self.attributes[attr_id]
+
+        # Update the attribute
         updated = attribute.edit(value)
+
         if updated is not None:
+            self.attribute_options["current_options"][attr_id] = updated.option
             self.log.info(f"Attribute updated in task {self.id}: {attribute}")
         else:
             self.log.error(f"Error updating attribute in task {self.id}: {attribute}")
@@ -578,14 +736,14 @@ class Client(LoggingHandler):
 
     # Build default UI
     def build_initial_ui(self):
-        """TODO:Build containers, task list, details, and help page"""
+        """Build the initial UI for the application"""
         # tkLayout
         #  root
         #  > menu_bar [[menu_bar]]
         #  > task_container [[task_container]]
         #  > detail_container [[detail_container]]
-        self.fetch_tasks()
         self.fetch_attributes()
+        self.fetch_tasks()
         self.build_task_list()
         self.build_task_details()
         self.help_page = self.build_help_page()
@@ -810,8 +968,7 @@ class Client(LoggingHandler):
         return help_page
 
     def build_task_list(self):
-        """Build the task list on the left side of the screen
-        """
+        """Build the task list on the left side of the screen"""
         open_tasks = [task for task in self.tasks if task.status == "open"]
         closed_tasks = [task for task in self.tasks if task.status == "closed"]
 
@@ -821,14 +978,33 @@ class Client(LoggingHandler):
             self.task_container.rowconfigure(i, weight=1, uniform="row")
         self.log.info(f"Built {len(self.tasks)} tasks in task list")
 
-
     def build_task_details(self):
-        """TODO:Grid task details for each task"""
-        pass
+        """Grid all the task details on the right side of the screen"""
+        for task in self.tasks:
+            task.detail_view["frame"].grid(row=1, column=1, columnspan=3, sticky='new')
+            self.detail_container.rowconfigure(0, weight=1, uniform="row")
+        self.log.info(f"Built {len(self.tasks)} task details")
 
-    def open_attribute_options(self, n):
-        """TODO:Open attribute options for task n"""
-        pass
+    def toggle_attribute_options(self, n):
+        """Toggle the attribute options for task n
+        :param n: Task to toggle
+        """
+        task = self.tasks[n]
+        if task.options_open is True:
+            task.options_open = False
+            task.detail_view["edit"].configure(state="normal")
+            # Hide the attribute options
+            task.attribute_options["frame"].grid_forget()
+            # Edit all attributes from temp storage
+            for i, attr in enumerate(task.attributes):
+                attr.edit(attr.value)
+        else:
+            task.options_open = True
+            # Disable closing editor so that it won't be saved while open
+            task.detail_view["edit"].configure(state="disabled")
+            # Show the attribute options
+            task.attribute_options["frame"].grid(row=3, column=0, columnspan=3, rowspan=3, sticky="nsw")
+            task.attribute_options["frame"].tkraise()
 
     # Updating Data
     def fetch_tasks(self):
@@ -866,37 +1042,72 @@ class Client(LoggingHandler):
             self.log.error(f"Error fetching attributes: {response["code"]} : {response["message"]}")
             return False
 
-
-    # Updating UI
-    def update_list(self):
-        """TODO:Update the task list to match server data.
-        Checks if any tasks have been added, removed or updated
-        """
-        pass
-
-    def update_details(self, n):
-        """TODO:Update the task details to match server data"""
-        pass
-
     def add_task(self):
         """TODO:Add new task to the server and UI"""
-        pass
+        new_task = Task(self, len(self.tasks), "New Task", "2024-01-01", [], "Description", "open")
+        response = self.connection.post("tasks/all", {"id": len(self.tasks), "name": "New Task", "date": "2024-01-01", "attributes":[], "description": "Description", "status": "open"})
+        if response["code"] != 200:
+            self.log.error(f"Error adding new task: {response["code"]} : {response["message"]}")
+            return
+        self.tasks.append(new_task)
+        new_task.assign_attributes()
+        self.build_task_list()
+        self.build_task_details()
+        self.log.info(f"Added new task {new_task}")
+        self.change_task(len(self.tasks) - 1)
+        self.edit_task(len(self.tasks) - 1)
 
     def edit_task(self, n):
-        """TODO:Toggle editing task"""
-        pass
-
-    def update_task(self, n):
-        """TODO:Update UI to match task data"""
-        pass
+        """Edit task n. Toggle editing on and off
+        :param n: Task to edit
+        """
+        task = self.tasks[n]
+        if task.editing is True:
+            task.editing = False
+            task.detail_view["name"].configure(state="disabled", fg_color="gray14")
+            task.detail_view["date"].configure(state="disabled", fg_color="gray20")
+            task.detail_view["description"].configure(state="disabled", fg_color="gray12")
+            task.detail_view["attributes"].configure(state="disabled", fg_color="gray14")
+            task.detail_view["frame"].configure(bg_color="gray14", fg_color="gray14")
+            task.detail_view["frame"].grid(row=1, column=1, columnspan=3, sticky='new')
+            task.detail_view["edit"].configure(text="Edit")
+            self.log.debug(f"Task {n} editing toggled off")
+            data = {
+                    "id": n,
+                    "name": task.detail_view["name"].get("1.0", "end-1c"),
+                    "date": task.detail_view["date"].get("1.0", "end-1c"),
+                    "description": task.detail_view["description"].get("1.0", "end-1c"),
+                    "status": "closed" if task.detail_view["complete"].get() else "open"
+            }
+            task.edit(data)
+            task.name = data["name"]
+            task.date = data["date"]
+            task.description = data["description"]
+            task.status = data["status"]
+            self.log.debug(f"Sent data {data} to server for task {n}")
+            self.log.info(f"Task {n} updated")
+        else:
+            task.editing = True
+            task.detail_view["edit"].configure(state="normal")
+            task.detail_view["name"].configure(state="normal", fg_color="royal blue")
+            task.detail_view["name"].focus_set()
+            task.detail_view["date"].configure(state="normal", fg_color="royal blue")
+            task.detail_view["description"].configure(state="normal", fg_color="royal blue")
+            task.detail_view["attributes"].configure(state="normal", fg_color="royal blue")
+            task.detail_view["frame"].configure(bg_color="gray20", fg_color="gray20")
+            task.detail_view["frame"].grid(row=1, column=1, columnspan=3, sticky='new')
+            task.detail_view["edit"].configure(text="Save")
 
     def delete_task(self, n):
         """TODO:Delete task from server and UI"""
         pass
 
     def toggle_active(self, n: int):
-        """TODO:Toggle task status"""
-        # Change checkmark and colors, and task status
+        """Toggle the active status of a task. Change checkmark and colors, and task status
+        :param n: Task to toggle
+        :return: True if successful, False if not
+        """
+        #
         task = self.tasks[n]
         task.toggle_active()
         if task.status == "open":
@@ -917,12 +1128,18 @@ class Client(LoggingHandler):
         """Change the task that is being viewed
         :param n: ID of the task to be viewed
         """
+        if self.help_page.winfo_ismapped():
+            self.help_page.grid_forget()
         self.extra_space.tkraise()
         self.tasks[n].detail_view["frame"].tkraise()
 
     def toggle_help(self):
         """TODO:Toggle help page"""
-        pass
+        if self.help_page.winfo_ismapped():
+            self.help_page.grid_forget()
+        else:
+            self.help_page.grid(row=1, column=0, columnspan=4, sticky='nsew')
+            self.help_page.tkraise()
 
     def add_attribute(self, n, name, value):
         """TODO:Add attribute to task n"""
@@ -1211,74 +1428,74 @@ socket.connect("tcp://localhost:5555")
 textbox_states = {}
 
 
-def edit_task(n):
-    name, date, description, attributes, attribute_label, complete, edit_button = task_detail_frames[n][1].values()
-    # If the textbox is not in the dictionary, assume it is disabled
-    if textbox_states.get(name, "disabled") == "normal":
-        payload = {
-            "type": "put",
-            "path": f"tasks/{n + 1}",
-            "data": {
-                "id": n + 1,
-                "name": name.get("1.0", "end-1c"),
-                "date": date.get("1.0", "end-1c"),
-                "description": description.get("1.0", "end-1c"),
-                "attributes": tasks[n]["attributes"],
-                "status": "closed" if complete.get() else "open"
-            }
-        }
-        socket.send_string(json.dumps(payload))
-        response = json.loads(socket.recv_string())
-        print(f"Editing task {n + 1} gave response: {response}")
-        for task_detail in task_detail_frames:
-            task_detail[0].destroy()
-        task_detail_frames.clear()
-        build_task_details()
-        build_task_list()
-        change_task(n)
-    else:
-        name.configure(state="normal", fg_color="royal blue")
-        name.focus_set()
-        date.configure(state="normal", fg_color="royal blue")
-        description.configure(state="normal", fg_color="royal blue")
-        attribute_label.configure(state="normal", fg_color="royal blue")
-        # Update the states in the dictionary
-        textbox_states[name] = "normal"
-        textbox_states[date] = "normal"
-        textbox_states[description] = "normal"
-        edit_button.configure(text="Save")
+# def edit_task(n):
+#     name, date, description, attributes, attribute_label, complete, edit_button = task_detail_frames[n][1].values()
+#     # If the textbox is not in the dictionary, assume it is disabled
+#     if textbox_states.get(name, "disabled") == "normal":
+#         payload = {
+#             "type": "put",
+#             "path": f"tasks/{n + 1}",
+#             "data": {
+#                 "id": n + 1,
+#                 "name": name.get("1.0", "end-1c"),
+#                 "date": date.get("1.0", "end-1c"),
+#                 "description": description.get("1.0", "end-1c"),
+#                 "attributes": tasks[n]["attributes"],
+#                 "status": "closed" if complete.get() else "open"
+#             }
+#         }
+#         socket.send_string(json.dumps(payload))
+#         response = json.loads(socket.recv_string())
+#         print(f"Editing task {n + 1} gave response: {response}")
+#         for task_detail in task_detail_frames:
+#             task_detail[0].destroy()
+#         task_detail_frames.clear()
+#         build_task_details()
+#         build_task_list()
+#         change_task(n)
+#     else:
+#         name.configure(state="normal", fg_color="royal blue")
+#         name.focus_set()
+#         date.configure(state="normal", fg_color="royal blue")
+#         description.configure(state="normal", fg_color="royal blue")
+#         attribute_label.configure(state="normal", fg_color="royal blue")
+#         # Update the states in the dictionary
+#         textbox_states[name] = "normal"
+#         textbox_states[date] = "normal"
+#         textbox_states[description] = "normal"
+#         edit_button.configure(text="Save")
 
 
-attribute_options = [None for _ in range(1000)]
-
-
-def build_attribute_options(n):
-    name, date, description, attributes, attribute_label, complete, edit_button = task_detail_frames[n][1].values()
-    print("Building attribute options", tasks[n]["attributes"], n)
-    if attribute_options[n] is not None:
-        # Close Menu
-        for attr in attributes:
-            attr.tkraise()
-        attribute_options[n].destroy()
-        attribute_options[n] = None
-        edit_button.configure(state="normal")
-    else:
-        edit_button.configure(state="disabled")
-        attr_options_frame = ctk.CTkFrame(task_detail_frames[n][0], bg_color="gray14", fg_color="gray14")
-        attribute_options[n] = attr_options_frame
-        attributes = task_detail_frames[n][1]["attributes"]
-        for attr in attributes:
-            attr.lower()
-        attr_options_frame.grid(row=3, column=0, columnspan=3, rowspan=3, sticky="nsw")
-        attr_options_frame.columnconfigure(0, weight=1)
-        attr_options_frame.columnconfigure(1, weight=1)
-        attr_options_frame.columnconfigure(2, weight=1)
-        # Current Attr Label
-        current_attr_label = ctk.CTkLabel(attr_options_frame, text="Current Attributes", font=("Arial", 30), padx=15)
-        current_attr_label.grid(row=0, column=0, sticky="nsw")
-        # Current Attributes
-        max_i = 0
-        for i, attr in enumerate(tasks[n]["attributes"]):
+# attribute_options = [None for _ in range(1000)]
+#
+#
+# def build_attribute_options(n):
+#     name, date, description, attributes, attribute_label, complete, edit_button = task_detail_frames[n][1].values()
+#     print("Building attribute options", tasks[n]["attributes"], n)
+#     if attribute_options[n] is not None:
+#         # Close Menu
+#         for attr in attributes:
+#             attr.tkraise()
+#         attribute_options[n].destroy()
+#         attribute_options[n] = None
+#         edit_button.configure(state="normal")
+#     else:
+#         edit_button.configure(state="disabled")
+#         attr_options_frame = ctk.CTkFrame(task_detail_frames[n][0], bg_color="gray14", fg_color="gray14")
+#         attribute_options[n] = attr_options_frame
+#         attributes = task_detail_frames[n][1]["attributes"]
+#         for attr in attributes:
+#             attr.lower()
+#         attr_options_frame.grid(row=3, column=0, columnspan=3, rowspan=3, sticky="nsw")
+#         attr_options_frame.columnconfigure(0, weight=1)
+#         attr_options_frame.columnconfigure(1, weight=1)
+#         attr_options_frame.columnconfigure(2, weight=1)
+#         # Current Attr Label
+#         current_attr_label = ctk.CTkLabel(attr_options_frame, text="Current Attributes", font=("Arial", 30), padx=15)
+#         current_attr_label.grid(row=0, column=0, sticky="nsw")
+#         # Current Attributes
+#         max_i = 0
+#         for i, attr in enumerate(tasks[n]["attributes"]):
             # attr_frame = ctk.CTkFrame(attr_options_frame, bg_color="gray14", fg_color="gray14")
             # attr_frame.grid(row=i + 1, column=0, columnspan=3, sticky="nsw")
             # attr_frame.columnconfigure(0, weight=1)
@@ -1298,18 +1515,18 @@ def build_attribute_options(n):
             # remove_button = ctk.CTkButton(attr_frame, text="Remove", font=("Arial", 25), width=80, bg_color="gray20")
             # remove_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
             # remove_button.bind("<Button-1>", lambda event, index=i: remove_attribute(n, index))
-            max_i = i
+            # max_i = i
 
         # Existing Attributes & Label
-        existing_attributes = []
-        for i, attr in enumerate(attribute_list):
-            if attr["name"] not in [a["name"] for a in tasks[n]["attributes"]]:
-                existing_attributes.append(attr)
-        if len(existing_attributes) > 0:
-            existing_attr_label = ctk.CTkLabel(attr_options_frame, text="Existing Attributes", font=("Arial", 30),
-                                               padx=15)
-            existing_attr_label.grid(row=max_i + 2, column=0, sticky="nsw")
-            for i, attr in enumerate(existing_attributes):
+        # existing_attributes = []
+        # for i, attr in enumerate(attribute_list):
+        #     if attr["name"] not in [a["name"] for a in tasks[n]["attributes"]]:
+        #         existing_attributes.append(attr)
+        # if len(existing_attributes) > 0:
+        #     existing_attr_label = ctk.CTkLabel(attr_options_frame, text="Existing Attributes", font=("Arial", 30),
+        #                                        padx=15)
+        #     existing_attr_label.grid(row=max_i + 2, column=0, sticky="nsw")
+        #     for i, attr in enumerate(existing_attributes):
                 # attr_frame = ctk.CTkFrame(attr_options_frame, bg_color="gray14", fg_color="gray14")
                 # attr_frame.grid(row=max_i + i + 3, column=0, columnspan=3, sticky="nsw")
                 # attr_frame.columnconfigure(0, weight=1)
@@ -1326,110 +1543,110 @@ def build_attribute_options(n):
                 # add_button = ctk.CTkButton(attr_frame, text="Add", font=("Arial", 25), width=80, bg_color="gray20")
                 # add_button.grid(row=0, column=2, sticky="nsw", pady=10, padx=10)
                 # add_button.bind("<Button-1>", lambda event, index=i: add_attribute(n, attr_name.get("1.0", "end-1c"), attr_value.get("1.0", "end-1c")))
-                max_i = i
-            max_i += 2
-
-        # New Attr Label (Just 2 blank textboxes and a button to add. If one is added, add another)
-        new_attr_label = ctk.CTkLabel(attr_options_frame, text="New Attributes", font=("Arial", 30), padx=15)
-        new_attr_label.grid(row=max_i + 4, column=0, sticky="nsw")
-        new_attr_frame = ctk.CTkFrame(attr_options_frame, bg_color="gray14", fg_color="gray14")
-        new_attr_frame.grid(row=max_i + 5, column=0, columnspan=3, sticky="nsw")
-        new_attr_frame.columnconfigure(0, weight=1)
-        new_attr_frame.columnconfigure(1, weight=1)
-        new_attr_frame.columnconfigure(2, weight=1)
-        new_attr_name = ctk.CTkTextbox(new_attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
-                                       fg_color="royal blue", wrap="none", corner_radius=10)
-        new_attr_name.insert('1.0', "name")
-        new_attr_name.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
-        new_attr_value = ctk.CTkTextbox(new_attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
-                                        fg_color="royal blue", wrap="none", corner_radius=10)
-        new_attr_value.insert('1.0', "value")
-        new_attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
-        add_button = ctk.CTkButton(new_attr_frame, text="Add", font=("Arial", 25), width=80, bg_color="gray14",
-                                   corner_radius=10)
-        add_button.grid(row=0, column=2, sticky="nsw")
-        add_button.bind("<Button-1>", lambda event: add_attribute(n, new_attr_name.get("1.0", "end-1c"),
-                                                                  new_attr_value.get("1.0", "end-1c")))
-        max_i += 1
-        attr_options_frame.rowconfigure(index=max_i + 5, weight=1, uniform="row")
-        attr_options_frame.grid(row=3, column=0, columnspan=3, rowspan=3, sticky="nsw")
-
-
-def update_attribute(n, name, value):
-    print("Updating attribute")
-    # Get attribute with name
-    for i, attr in enumerate(tasks[n]["attributes"]):
-        if attr["name"] == name:
-            tasks[n]["attributes"][i]["value"] = value
-            payload = {
-                "type": "put",
-                "path": f"tasks/{n + 1}",
-                "data": {
-                    "id": n + 1,
-                    "name": task_detail_frames[n][1]["name"].get("1.0", "end-1c"),
-                    "date": task_detail_frames[n][1]["date"].get("1.0", "end-1c"),
-                    "description": task_detail_frames[n][1]["description"].get("1.0", "end-1c"),
-                    "attributes": tasks[n]["attributes"],
-                    "status": tasks[n]["status"]
-                }
-            }
-            socket.send_string(json.dumps(payload))
-            response = json.loads(socket.recv_string())
-            print(f"Updating attribute {name} to {value} gave response: {response}")
-            break
-
-
-def add_attribute(n, name, value):
-    tasks[n]["attributes"].append({
-        "name": name,
-        "value": value
-    })
-    attribute_list.append({
-        "name": name
-    })
-    # If attribute not in db, add it
-    if name not in [attr["name"] for attr in attribute_list]:
-        payload = {
-            "type": "post",
-            "path": "attributes/",
-            "data": {
-                "name": name
-            }
-        }
-        socket.send_string(json.dumps(payload))
-        response = json.loads(socket.recv_string())
-        print(f"Adding attribute {name}, with value {value} gave response: {response}")
-    attribute_options[n].destroy()
-    attribute_options[n] = None
-    build_attribute_options(n)
-
-
-def remove_attribute(n, index):
-    attr_name = tasks[n]["attributes"][index]["name"]
-    tasks[n]["attributes"].pop(index)
-    payload = {
-        "type": "put",
-        "path": f"tasks/{n + 1}",
-        "data": {
-            "id": n + 1,
-            "name": task_detail_frames[n][1]["name"].get("1.0", "end-1c"),
-            "date": task_detail_frames[n][1]["date"].get("1.0", "end-1c"),
-            "description": task_detail_frames[n][1]["description"].get("1.0", "end-1c"),
-            "attributes": tasks[n]["attributes"],
-            "status": tasks[n]["status"]
-        }
-    }
-    socket.send_string(json.dumps(payload))
-    response = json.loads(socket.recv_string())
-    print(f"Removing attribute {attr_name} gave response: {response}")
-    attribute_options[n].destroy()
-    attribute_options[n] = None
-    build_attribute_options(n)
-
-
+#                 max_i = i
+#             max_i += 2
+#
+#         # New Attr Label (Just 2 blank textboxes and a button to add. If one is added, add another)
+#         new_attr_label = ctk.CTkLabel(attr_options_frame, text="New Attributes", font=("Arial", 30), padx=15)
+#         new_attr_label.grid(row=max_i + 4, column=0, sticky="nsw")
+#         new_attr_frame = ctk.CTkFrame(attr_options_frame, bg_color="gray14", fg_color="gray14")
+#         new_attr_frame.grid(row=max_i + 5, column=0, columnspan=3, sticky="nsw")
+#         new_attr_frame.columnconfigure(0, weight=1)
+#         new_attr_frame.columnconfigure(1, weight=1)
+#         new_attr_frame.columnconfigure(2, weight=1)
+#         new_attr_name = ctk.CTkTextbox(new_attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
+#                                        fg_color="royal blue", wrap="none", corner_radius=10)
+#         new_attr_name.insert('1.0', "name")
+#         new_attr_name.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
+#         new_attr_value = ctk.CTkTextbox(new_attr_frame, font=("Arial", 25), border_width=0, height=1, width=150,
+#                                         fg_color="royal blue", wrap="none", corner_radius=10)
+#         new_attr_value.insert('1.0', "value")
+#         new_attr_value.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+#         add_button = ctk.CTkButton(new_attr_frame, text="Add", font=("Arial", 25), width=80, bg_color="gray14",
+#                                    corner_radius=10)
+#         add_button.grid(row=0, column=2, sticky="nsw")
+#         add_button.bind("<Button-1>", lambda event: add_attribute(n, new_attr_name.get("1.0", "end-1c"),
+#                                                                   new_attr_value.get("1.0", "end-1c")))
+#         max_i += 1
+#         attr_options_frame.rowconfigure(index=max_i + 5, weight=1, uniform="row")
+#         attr_options_frame.grid(row=3, column=0, columnspan=3, rowspan=3, sticky="nsw")
+#
+#
+# def update_attribute(n, name, value):
+#     print("Updating attribute")
+#     # Get attribute with name
+#     for i, attr in enumerate(tasks[n]["attributes"]):
+#         if attr["name"] == name:
+#             tasks[n]["attributes"][i]["value"] = value
+#             payload = {
+#                 "type": "put",
+#                 "path": f"tasks/{n + 1}",
+#                 "data": {
+#                     "id": n + 1,
+#                     "name": task_detail_frames[n][1]["name"].get("1.0", "end-1c"),
+#                     "date": task_detail_frames[n][1]["date"].get("1.0", "end-1c"),
+#                     "description": task_detail_frames[n][1]["description"].get("1.0", "end-1c"),
+#                     "attributes": tasks[n]["attributes"],
+#                     "status": tasks[n]["status"]
+#                 }
+#             }
+#             socket.send_string(json.dumps(payload))
+#             response = json.loads(socket.recv_string())
+#             print(f"Updating attribute {name} to {value} gave response: {response}")
+#             break
+#
+#
+# def add_attribute(n, name, value):
+#     tasks[n]["attributes"].append({
+#         "name": name,
+#         "value": value
+#     })
+#     attribute_list.append({
+#         "name": name
+#     })
+#     # If attribute not in db, add it
+#     if name not in [attr["name"] for attr in attribute_list]:
+#         payload = {
+#             "type": "post",
+#             "path": "attributes/",
+#             "data": {
+#                 "name": name
+#             }
+#         }
+#         socket.send_string(json.dumps(payload))
+#         response = json.loads(socket.recv_string())
+#         print(f"Adding attribute {name}, with value {value} gave response: {response}")
+#     attribute_options[n].destroy()
+#     attribute_options[n] = None
+#     build_attribute_options(n)
+#
+#
+# def remove_attribute(n, index):
+#     attr_name = tasks[n]["attributes"][index]["name"]
+#     tasks[n]["attributes"].pop(index)
+#     payload = {
+#         "type": "put",
+#         "path": f"tasks/{n + 1}",
+#         "data": {
+#             "id": n + 1,
+#             "name": task_detail_frames[n][1]["name"].get("1.0", "end-1c"),
+#             "date": task_detail_frames[n][1]["date"].get("1.0", "end-1c"),
+#             "description": task_detail_frames[n][1]["description"].get("1.0", "end-1c"),
+#             "attributes": tasks[n]["attributes"],
+#             "status": tasks[n]["status"]
+#         }
+#     }
+#     socket.send_string(json.dumps(payload))
+#     response = json.loads(socket.recv_string())
+#     print(f"Removing attribute {attr_name} gave response: {response}")
+#     attribute_options[n].destroy()
+#     attribute_options[n] = None
+#     build_attribute_options(n)
+#
+#
 # Add tasks to right side
-
-task_detail_frames = []
+#
+# task_detail_frames = []
 
 # extra_space = ctk.CTkLabel(right_final_window, text="", bg_color="gray14", fg_color="gray14", height=500)
 # extra_space.grid(row=0, rowspan=3, column=0, columnspan=4, sticky="nsew")
@@ -1538,64 +1755,33 @@ task_detail_frames = []
 #         }))
 
 
-def toggle_active(n):
-    if task_detail_frames[n][1]["complete"].get():
-        payload = {
-            "type": "put",
-            "path": f"tasks/{n + 1}",
-            "data": {
-                "id": n + 1,
-                "name": tasks[n]["name"],
-                "date": tasks[n]["date"],
-                "description": tasks[n]["description"],
-                "attributes": tasks[n]["attributes"],
-                "status": "closed"
-            }
-        }
-    else:
-        payload = {
-            "type": "put",
-            "path": f"tasks/{n + 1}",
-            "data": {
-                "id": n + 1,
-                "name": tasks[n]["name"],
-                "date": tasks[n]["date"],
-                "description": tasks[n]["description"],
-                "attributes": tasks[n]["attributes"],
-                "status": "open"
-            }
-        }
-    socket.send_string(json.dumps(payload))
-    response = json.loads(socket.recv_string())
-    build_task_list()
-    print(f"Toggle Task {n + 1} gave response: {response}")
 
 
-def add_task():
-    new_task = {
-        "id": len(tasks) + 1,
-        "name": "New Task Name",
-        "date": "2024/01/01",
-        "description": "New Description",
-        "attributes": [],
-        "status": "open"
-    }
-    tasks.append(new_task)
-    payload = {
-        "type": "post",
-        "path": "tasks/",
-        "data": new_task
-    }
-    socket.send_string(json.dumps(payload))
-    response = json.loads(socket.recv_string())
-    print(f"Add task gave response: {response}")
-    for task_detail in task_detail_frames:
-        task_detail[0].destroy()
-    task_detail_frames.clear()
-    build_task_details()
-    build_task_list()
-    change_task(len(tasks) - 1)
-    edit_task(len(tasks) - 1)
+# def add_task():
+#     new_task = {
+#         "id": len(tasks) + 1,
+#         "name": "New Task Name",
+#         "date": "2024/01/01",
+#         "description": "New Description",
+#         "attributes": [],
+#         "status": "open"
+#     }
+#     tasks.append(new_task)
+#     payload = {
+#         "type": "post",
+#         "path": "tasks/",
+#         "data": new_task
+#     }
+#     socket.send_string(json.dumps(payload))
+#     response = json.loads(socket.recv_string())
+#     print(f"Add task gave response: {response}")
+#     for task_detail in task_detail_frames:
+#         task_detail[0].destroy()
+#     task_detail_frames.clear()
+#     build_task_details()
+#     build_task_list()
+#     change_task(len(tasks) - 1)
+#     edit_task(len(tasks) - 1)
 
 
 def open_help():
