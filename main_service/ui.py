@@ -7,6 +7,7 @@ import logging  # Custom logger with easier to read colors and easier to control
 import sys
 import argparse  # Used to enable debug logging
 # TODO: When functions are done, improve docstring with more info
+# TODO: Sort function order
 
 
 class CustomFormatter(logging.Formatter):
@@ -231,14 +232,18 @@ class Attribute(AttributeRecord):
 class Task(LoggingHandler):
     """TODO TASK DOCSTRING"""
 
-    def __init__(self, client, task_id, name, date, attributes, description, status, parent=None, child=None, *args, **kwargs):
+    def __init__(self, client, task_id, name, date, attributes, description, status, parent=None, children=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if children is None:
+            children = []
         self.client: Client = client
         self.id: int = task_id
         self.name: str = name
         self.date: str = date
         self.description: str = description
         self.attributes: list[Attribute] = attributes
+        self.parent = parent
+        self.children = children
         self.options_frame = None
         self.assign_attributes()
         self.status: str = status
@@ -249,8 +254,7 @@ class Task(LoggingHandler):
         self.attribute_options = self.build_attribute_options(self.options_frame)
         self.options_open = False
         self.editing = False
-        self.parent = parent
-        self.child = child
+
         self.log.info(f"Task created: {self}")
 
     def __str__(self):
@@ -270,10 +274,9 @@ class Task(LoggingHandler):
             for key, value in new_data.items():
                 if self.__dict__[key] != value:
                     self.__dict__[key] = value
-                    if key == "name":
-                        self.list_item["name"].configure(text=f'{self.date} - {self.name}')
-                    if key == "date":
-                        self.list_item["name"].configure(text=f'{self.date} - {self.name}')
+                    number = self.list_item["name"].cget("text").split(":")[0]
+                    if key == "name" or key == "date":
+                        self.list_item["name"].configure(text=f'{number}: {self.date} - {self.name}')
                     if key == "attributes":
                         attr_list = ", ".join(attr.value for attr in self.attributes)
                         self.list_item["attributes"].configure(text=f'{attr_list}')
@@ -325,13 +328,16 @@ class Task(LoggingHandler):
         #  > name
         #  > filler
         #  > attributes
-        button = ctk.CTkButton(parent, command=lambda index=self.id: self.client.change_task(index), text="", width=400,
+        button = ctk.CTkButton(parent, command=lambda index=self.id: self.client.change_task(index), text="", width=350,
                                height=100)
         if self.status == "closed":
             button.configure(bg_color="gray14", fg_color="gray20")
-
+        number = f"{self.id + 1}"
+        if self.parent is not None:
+            if not isinstance(self.parent, int):
+                number = f"{self.parent.id + 1} -> {number}"
         # Name for task title
-        name = ctk.CTkLabel(button, text=f'{self.id+1}: {self.date} - {self.name}', font=("Arial", 20), padx=10, pady=10,
+        name = ctk.CTkLabel(button, text=f'{number}: {self.date} - {self.name}', font=("Arial", 20), padx=10, pady=10,
                             fg_color="transparent", bg_color="transparent")
         name.grid(row=0, column=0, sticky="nsw")
         # Bind the click event to the label, so you can click anywhere on the task
@@ -358,7 +364,7 @@ class Task(LoggingHandler):
         return list_item
 
     def build_detail_view(self, parent):
-        """TODO:Build task detail view"""
+        """TODO:Build task detail view. Add more comments and separate out stuff"""
         # tkLayout
         #  task_detail_frame #[[task_detail_frame]]
         #  > name_frame
@@ -434,13 +440,27 @@ class Task(LoggingHandler):
         date.configure(state="disabled")
         date.grid(row=1, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
 
+        if self.parent is None:
+            add_child = ctk.CTkButton(task_detail_frame, text="Add Child", command=lambda: self.client.add_child(self.id),
+                                      font=("Arial", 30), width=50, bg_color="gray14")
+            add_child.grid(row=1, column=1, sticky="nsw", pady=10)
+        else:
+            if not isinstance(self.parent, int):
+                parent_details = ctk.CTkButton(task_detail_frame, text=f'Parent: ID:{self.parent.id+ 1} - {self.parent.name}', font=("Arial", 30), command=lambda: self.client.change_task(self.parent.id))
+                parent_details.grid(row=2, column=0, sticky="nsw", pady=10)
+
+        if len(self.children) > 0:
+            if not isinstance(self.children[0], int):
+                child_details = ctk.CTkLabel(task_detail_frame, text=f'Children:\n{"\n ".join([f"ID:{child.id} - {child.name}" for child in self.children])}', font=("Arial", 30), padx=15)
+                child_details.grid(row=2, column=0, sticky="nsw", pady=10)
+
         # Attribute Label
         attribute_label = ctk.CTkButton(task_detail_frame, text="Attributes", font=("Arial", 30),
                                         command=lambda: self.client.toggle_attribute_options(self.id),
                                         state="disabled", bg_color="gray14", fg_color="gray14", text_color="white", text_color_disabled="white")
-        attribute_label.grid(row=2, column=0, columnspan=3, sticky="nsw", pady=10, padx=15)
+        attribute_label.grid(row=3, column=0, columnspan=3, sticky="nsw", pady=10, padx=15)
         # Attributes
-        max_j = 6
+        max_j = 7
         for attr in self.attributes:
             if attr.label is None:
                 attr.label = attr.build_label(task_detail_frame)
@@ -763,6 +783,14 @@ class Client(LoggingHandler):
         #  > detail_container [[detail_container]]
         self.fetch_attributes()
         self.fetch_tasks()
+        self.assign_children()
+        for task in self.tasks:
+            if task.parent is not None:
+                task.detail_view = task.build_detail_view(self.detail_container)
+                task.list_item = task.build_list_item(self.task_container)
+            if len(task.children) > 0:
+                task.detail_view = task.build_detail_view(self.detail_container)
+                task.list_item = task.build_list_item(self.task_container)
         self.build_task_list()
         self.build_task_details()
         self.help_page = self.build_help_page()
@@ -789,8 +817,6 @@ class Client(LoggingHandler):
         # Sort & Filter
         sorting_button = ctk.CTkButton(menu_bar, text="Sort and Filter", font=("Arial", 20), width=40, height=20, command=self.toggle_sf_menu)
         sorting_button.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
-
-
 
         # Add
         add_task_button = ctk.CTkButton(menu_bar, text="Add Task", font=("Arial", 20), width=20, height=20,
@@ -819,7 +845,7 @@ class Client(LoggingHandler):
     def build_root(self, root: ctk.CTk):
         """Build the root window for the application"""
         root.configure(background="gray14")
-        root.geometry('1200x800')
+        root.geometry('1300x800')
         # Adding columns and rows
         root.columnconfigure(0, weight=1)
         root.columnconfigure(1, weight=50)
@@ -992,6 +1018,7 @@ class Client(LoggingHandler):
         return help_page
 
     def build_sf_menu(self):
+        """TODO DOcstring"""
         sf_menu = ctk.CTkFrame(self.menu_bar["menu_bar"], bg_color="gray14", fg_color="gray14")
         sort_menu = ctk.CTkFrame(sf_menu, bg_color="gray14", fg_color="gray14")
         sort_menu.grid(row=0, column=0, sticky="nsw")
@@ -1168,13 +1195,13 @@ class Client(LoggingHandler):
         response = self.server.get("tasks/all")
         if response["code"] == 200:
             for task in response["data"]:
-                if task["status"] == "deleted":
-                    continue
                 attr_list = []
                 for attr in task["attributes"]:
                     attr_list.append(Attribute(self, attr["id"], attr["name"], attr["value"]))
-                new_task = Task(self, task["id"], task["name"], task["date"], attr_list, task["description"], task["status"])
+                new_task = Task(self, task["id"], task["name"], task["date"], attr_list, task["description"], task["status"], task["parent"], task["children"])
                 new_task.assign_attributes()
+
+
                 self.tasks.append(new_task)
 
             self.log.info(f"Fetched {len(self.tasks)} tasks from server")
@@ -1198,6 +1225,16 @@ class Client(LoggingHandler):
             self.log.error(f"Error fetching attributes: {response["code"]} : {response["message"]}")
             return False
 
+    def assign_children(self):
+        for task in self.tasks:
+            child_list = []
+            for child in task.children:
+                child_list.append(self.get_task(child))
+            task.children = child_list
+
+            if task.parent is not None:
+                parent = self.get_task(task.parent)
+                task.parent = parent
 
     def get_task(self, n):
         """Get the task of id n
@@ -1213,12 +1250,14 @@ class Client(LoggingHandler):
 
 
     def add_task(self):
-        """TODO:Add new task to the server and UI"""
+        """Add a new task to the server and UI
+        :return: The new task
+        """
         new_task = Task(self, len(self.tasks), "New Task", "2024-01-01", [], "Description", "open")
-        response = self.server.post("tasks/all", {"id": len(self.tasks), "name": "New Task", "date": "2024-01-01", "attributes":[], "description": "Description", "status": "open"})
+        response = self.server.post("tasks/all", {"id": len(self.tasks), "name": "New Task", "date": "2024-01-01", "parent": None, "children": [], "attributes": [], "description": "Description", "status": "open"})
         if response["code"] != 200:
             self.log.error(f"Error adding new task: {response["code"]} : {response["message"]}")
-            return
+            return response
         self.tasks.append(new_task)
         new_task.assign_attributes()
         self.build_task_list()
@@ -1226,6 +1265,7 @@ class Client(LoggingHandler):
         self.log.info(f"Added new task {new_task}")
         self.change_task(len(self.tasks) - 1)
         self.edit_task(len(self.tasks) - 1)
+        return new_task
 
     def edit_task(self, n):
         """Edit task n. Toggle editing on and off
@@ -1337,17 +1377,22 @@ class Client(LoggingHandler):
             self.menu_bar["sf_menu"].grid(row=1, column=0, sticky="nsw", pady=10, padx=10)
             self.menu_bar["sf_menu"].tkraise()
 
-    def add_attribute(self, n, name, value):
-        """TODO:Add attribute to task n"""
-        pass
-
-    def remove_attribute(self, n, index):
-        """TODO:Remove attribute from task n"""
-        pass
-
-    def update_attribute(self, n, name, value):
-        """TODO:Update attribute in task n"""
-        pass
+    def add_child(self, id: int):
+        """Add a child task to the task with ID id
+        :param id: ID of the parent task
+        """
+        parent = self.get_task(id)
+        child = self.add_task()
+        parent.children.append(child)
+        child.parent = parent
+        child_ids = [child.id for child in parent.children]
+        response = self.server.put(f"tasks/{parent.id}", {"children": child_ids })
+        if response["code"] != 200:
+            self.log.error(f"Error adding child {child.id} to parent {parent.id}: {response["code"]} : {response["message"]}")
+        response = self.server.put(f"tasks/{child.id}", {"parent": parent.id})
+        if response["code"] != 200:
+            self.log.error(f"Error adding parent {parent.id} to {child.id}: {response["code"]} : {response["message"]}")
+        self.log.info(f"Added child {child.id} to parent {parent.id}")
 
 
 class Connection(LoggingHandler):

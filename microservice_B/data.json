@@ -2,66 +2,10 @@
     "tasks": [
         {
             "id": 0,
-            "name": "Milestone 2",
-            "date": "06/03/2024",
-            "description": "Description for task 1",
-            "attributes": [
-                {
-                    "id": 0,
-                    "name": "Priority",
-                    "value": "4"
-                },
-                {
-                    "id": 1,
-                    "name": "Class",
-                    "value": "value"
-                },
-                {
-                    "id": 6,
-                    "name": "New Atr",
-                    "value": "value"
-                },
-                {
-                    "id": 8,
-                    "name": "1",
-                    "value": "value"
-                }
-            ],
-            "status": "closed"
-        },
-        {
-            "id": 1,
-            "name": "Milestone 4",
-            "date": "06/03/2024",
-            "description": "Description for task 2",
-            "attributes": [
-                {
-                    "id": 0,
-                    "name": "Priority",
-                    "value": "1"
-                },
-                {
-                    "id": 8,
-                    "name": "1",
-                    "value": "1"
-                }
-            ],
-            "status": "closed"
-        },
-        {
-            "id": 2,
-            "attributes": [],
-            "status": "deleted"
-        },
-        {
-            "id": 3,
-            "attributes": [],
-            "status": "deleted"
-        },
-        {
-            "id": 4,
             "name": "Milestone 6",
             "date": "06/03/2024",
+            "parent": null,
+            "children": [],
             "description": "Description for task 5",
             "attributes": [
                 {
@@ -73,14 +17,14 @@
             "status": "closed"
         },
         {
-            "id": 5,
-            "attributes": [],
-            "status": "deleted"
-        },
-        {
-            "id": 6,
+            "id": 1,
             "name": "Milestone 100",
             "date": "06/10/2024",
+            "parent": null,
+            "children": [
+                7,
+                9
+            ],
             "description": "Description for task 7",
             "attributes": [
                 {
@@ -102,9 +46,13 @@
             "status": "open"
         },
         {
-            "id": 7,
+            "id": 2,
             "name": "Newest Name",
             "date": "2024-01-01",
+            "parent": null,
+            "children": [
+                8
+            ],
             "attributes": [
                 {
                     "id": 0,
@@ -116,9 +64,111 @@
             "status": "open"
         },
         {
-            "id": 8,
+            "id": 3,
+            "name": "Task 4",
+            "parent": null,
+            "children": [],
+            "date": "2024-01-01",
             "attributes": [],
-            "status": "deleted"
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 4,
+            "name": "Task 5",
+            "parent": null,
+            "children": [
+                5,
+                12
+            ],
+            "date": "2024-01-01",
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 5,
+            "name": "Task 6 !",
+            "date": "2024-01-01",
+            "parent": 4,
+            "children": [],
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 6,
+            "name": "New Task",
+            "date": "2024-01-01",
+            "parent": null,
+            "children": [
+                10
+            ],
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 7,
+            "name": "Task 8!",
+            "date": "2024-01-01",
+            "parent": 1,
+            "children": [],
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 8,
+            "name": "New Task",
+            "date": "2024-01-01",
+            "parent": 2,
+            "children": [],
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 9,
+            "name": "New Task",
+            "date": "2024-01-01",
+            "parent": 1,
+            "children": [],
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 10,
+            "name": "Task!",
+            "date": "2024-01-01",
+            "parent": 6,
+            "children": [
+                11
+            ],
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 11,
+            "name": "New Task",
+            "date": "2024-01-01",
+            "parent": 10,
+            "children": [],
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
+        },
+        {
+            "id": 12,
+            "name": "New Task",
+            "date": "2024-01-01",
+            "parent": 4,
+            "children": [],
+            "attributes": [],
+            "description": "Description",
+            "status": "open"
         }
     ],
     "attributes": [

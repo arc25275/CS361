@@ -38,7 +38,6 @@ while True:
                             response["data"] = server_data["tasks"][int(spec)]
                         case _:
                             response["code"] = 400
-                    response["data"] = list(filter(lambda i: i["status"] != "deleted", server_data["tasks"]))
                 case "attributes":
                     match spec:
                         case "all":
@@ -102,7 +101,9 @@ while True:
                                     server_data["tasks"][task_index]["attributes"] = res
                                 case "":
                                     task_index = int(spec)
-                                    server_data["tasks"][task_index] = {"id": server_data["tasks"][task_index]["id"], "attributes": [], "status": "deleted"}
+                                    del server_data["tasks"][task_index]
+                                    for task in range(task_index, len(server_data["tasks"])):
+                                        server_data["tasks"][task]["id"] -= 1
                         case _:
                             response["code"] = 400
                 case "attributes":

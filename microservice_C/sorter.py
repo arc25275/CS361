@@ -32,8 +32,6 @@ while True:
             if attr:
                 tasks_with_attr = []
                 for task in tasks:
-                    if task["status"] == "deleted":
-                        continue
                     for attribute in task["attributes"]:
                         if attribute["name"] == limiter:
                             value = int(attribute["value"]) if attribute["value"].isdigit() else attribute["value"]
@@ -70,16 +68,12 @@ while True:
             filtered = []
             if attr:
                 for task in tasks:
-                    if task["status"] == "deleted":
-                        continue
                     for attribute in task["attributes"]:
                         if attribute["name"] == limiter and attribute["value"] == filter:
                             filtered.append(task)
                             break
             else:
                 for task in tasks:
-                    if task["status"] == "deleted":
-                        continue
                     if str(task[limiter]) == filter:
                         filtered.append(task)
             id_list = []
