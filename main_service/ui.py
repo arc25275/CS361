@@ -75,7 +75,7 @@ class AttributeRecord(LoggingHandler):
         """Delete attribute from server
         :return: True if successful, False if not
         """
-        response = self.client.connection.delete(f"attributes/{self.id}", "")
+        response = self.client.server.delete(f"attributes/{self.id}", "")
         if response["code"] == 200:
             self.client.attribute_records.remove(self)
             self.log.debug(f"Attribute deleted from server: {self}")
@@ -141,7 +141,7 @@ class Attribute(AttributeRecord):
         :param new_value: New value to replace previous
         :return: Updated attribute
         """
-        response = self.client.connection.put(f"tasks/{self.task.id}/attributes", {"id": self.id, "value": new_value})
+        response = self.client.server.put(f"tasks/{self.task.id}/attributes", {"id": self.id, "value": new_value})
         if response["code"] == 200:
             self.value = new_value
             if self.task is not None:
@@ -169,7 +169,7 @@ class Attribute(AttributeRecord):
             return False
 
         # Remove the attribute from the task
-        response = self.client.connection.delete(f"tasks/{self.task.id}/attributes/", {"id": self.id})
+        response = self.client.server.delete(f"tasks/{self.task.id}/attributes/", {"id": self.id})
         if response["code"] == 200:
             self.task.attributes = [attr for attr in self.task.attributes if attr.id != self.id]
             self.log.debug(f"Attribute removed from task: {self}")
@@ -231,7 +231,7 @@ class Attribute(AttributeRecord):
 class Task(LoggingHandler):
     """TODO TASK DOCSTRING"""
 
-    def __init__(self, client, task_id, name, date, attributes, description, status, *args, **kwargs):
+    def __init__(self, client, task_id, name, date, attributes, description, status, parent=None, child=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.client: Client = client
         self.id: int = task_id
@@ -249,6 +249,8 @@ class Task(LoggingHandler):
         self.attribute_options = self.build_attribute_options(self.options_frame)
         self.options_open = False
         self.editing = False
+        self.parent = parent
+        self.child = child
         self.log.info(f"Task created: {self}")
 
     def __str__(self):
@@ -263,7 +265,7 @@ class Task(LoggingHandler):
         :return: Updated task if successful, None if not
         """
         # Compare new data to old data
-        response = self.client.connection.put(f"tasks/{self.id}", new_data)
+        response = self.client.server.put(f"tasks/{self.id}", new_data)
         if response["code"] == 200:
             for key, value in new_data.items():
                 if self.__dict__[key] != value:
@@ -285,7 +287,7 @@ class Task(LoggingHandler):
         """Delete task from server
         :return: True if successful, False if not
         """
-        response = self.client.connection.delete(f"tasks/{self.id}", "")
+        response = self.client.server.delete(f"tasks/{self.id}", "")
         if response["code"] == 200:
             for attr in self.attributes:
                 attr.remove()
@@ -329,7 +331,7 @@ class Task(LoggingHandler):
             button.configure(bg_color="gray14", fg_color="gray20")
 
         # Name for task title
-        name = ctk.CTkLabel(button, text=f'{self.date} - {self.name}', font=("Arial", 20), padx=10, pady=10,
+        name = ctk.CTkLabel(button, text=f'{self.id+1}: {self.date} - {self.name}', font=("Arial", 20), padx=10, pady=10,
                             fg_color="transparent", bg_color="transparent")
         name.grid(row=0, column=0, sticky="nsw")
         # Bind the click event to the label, so you can click anywhere on the task
@@ -411,6 +413,14 @@ class Task(LoggingHandler):
         complete_box.grid(column=1, row=0, sticky="nsew")
         complete_frame.grid(column=1, row=0, sticky="nsw", pady=10, padx=10)
 
+        # Delete Button
+        delete_button = ctk.CTkButton(task_detail_frame, text="Delete", command=lambda: self.client.delete_task(self.id),
+                                        font=("Arial", 30), width=80, bg_color="gray14", state="disabled")
+        if self.status == "closed":
+            delete_button.configure(state="normal")
+
+        delete_button.grid(column=2, row=1, sticky="nsw", pady=10)
+
         # Editing Button
         edit_button = ctk.CTkButton(task_detail_frame, text="Edit", command=lambda: self.client.edit_task(self.id),
                                     font=("Arial", 30), width=80, bg_color="gray14")
@@ -467,6 +477,7 @@ class Task(LoggingHandler):
             "date": date,
             "description": description,
             "complete": complete_box,
+            "delete": delete_button,
             "edit": edit_button,
             "attributes": attribute_label,
             "frame": task_detail_frame
@@ -576,8 +587,8 @@ class Task(LoggingHandler):
         attr_id = len(self.client.attribute_records)
         new_attribute = Attribute(self.client, attr_id, name, value, self)
         # Add attribute to main list, and then to task.
-        attr_response = self.client.connection.post(f"attributes", {"id": attr_id, "name": name})
-        task_response = self.client.connection.post(f"tasks/{self.id}/attributes", {"id": attr_id, "name": name, "value": value})
+        attr_response = self.client.server.post(f"attributes", {"id": attr_id, "name": name})
+        task_response = self.client.server.post(f"tasks/{self.id}/attributes", {"id": attr_id, "name": name, "value": value})
 
         if task_response["code"] == 200 and attr_response["code"] == 200:
             self.attributes.append(new_attribute)
@@ -610,7 +621,7 @@ class Task(LoggingHandler):
             self.log.warning(f"Attribute {attr_id} already exists in task {self.id}")
             return None
         name = self.client.attribute_records[attr_id].name
-        response = self.client.connection.post(f"tasks/{self.id}/attributes", {"id": attr_id, "name": name, "value": value})
+        response = self.client.server.post(f"tasks/{self.id}/attributes", {"id": attr_id, "name": name, "value": value})
         if response["code"] == 200:
             # Create new attribute
             new_attribute = Attribute(self.client, attr_id, name, value, self)
@@ -649,7 +660,7 @@ class Task(LoggingHandler):
         attribute = next((attr for attr in self.attributes if attr.id == attr_id), None)
         print(attribute.id)
         attr_id = attribute.id
-        response = self.client.connection.delete(f"tasks/{self.id}/attributes", {"id": attribute.id})
+        response = self.client.server.delete(f"tasks/{self.id}/attributes", {"id": attribute.id})
         if response["code"] == 200:
             # Remove attribute from task
             attribute.label.grid_forget()
@@ -686,7 +697,7 @@ class Task(LoggingHandler):
         :param value: New value for the attribute
         """
         # Get attribute
-        attribute = self.attributes[attr_id]
+        attribute = next((attr for attr in self.attributes if attr.id == attr_id), None)
 
         # Update the attribute
         updated = attribute.edit(value)
@@ -719,15 +730,23 @@ def stop_scroll(event, widget):
 
 
 class Client(LoggingHandler):
-    """TODO CLIENT DOCSTRING"""
+    """Client for the To-Do List Application. Inherits from LoggingHandler to allow a logger per class"""
 
-    def __init__(self, connection, *args, **kwargs):
+    def __init__(self, server, sort_server, *args, **kwargs):
+        """
+        :param connection:
+        :param args:
+        :param kwargs:
+        """
         super().__init__(*args, **kwargs)
         self.root = self.build_root(ctk.CTk())
-        self.connection: Connection = connection
+        self.server: Connection = server
+        self.sort_server: Connection = sort_server
         self.tasks: list[Task] = []
         self.attribute_records: list[AttributeRecord] = []
-        self.menu_bar = self.build_menu(),
+        self.menu_bar = None
+        self.sort = {"sort": "", "order": "", "attr": False}
+        self.filter = {"filter": "", "value": "", "attr": False}
         self.task_container = self.build_task_list_container()
         self.extra_space, self.detail_container = self.build_detail_container()
         self.help_page = None
@@ -747,9 +766,12 @@ class Client(LoggingHandler):
         self.build_task_list()
         self.build_task_details()
         self.help_page = self.build_help_page()
+        self.menu_bar = self.build_menu()
+        self.menu_bar["sf_menu"] = self.build_sf_menu()
         self.log.info("Initial UI built")
         self.root.update()
         self.root.mainloop()
+
 
     def build_menu(self):
         """Create the menu bar and buttons on it.
@@ -765,8 +787,10 @@ class Client(LoggingHandler):
         menu_bar.grid(row=0, column=0, columnspan=4, sticky='nsew')
 
         # Sort & Filter
-        sorting_button = ctk.CTkButton(menu_bar, text="Sort and Filter", font=("Arial", 20), width=40, height=20)
+        sorting_button = ctk.CTkButton(menu_bar, text="Sort and Filter", font=("Arial", 20), width=40, height=20, command=self.toggle_sf_menu)
         sorting_button.grid(row=0, column=0, sticky="nsw", pady=10, padx=10)
+
+
 
         # Add
         add_task_button = ctk.CTkButton(menu_bar, text="Add Task", font=("Arial", 20), width=20, height=20,
@@ -967,16 +991,146 @@ class Client(LoggingHandler):
         self.log.debug(f"Help page built: {help_page}")
         return help_page
 
+    def build_sf_menu(self):
+        sf_menu = ctk.CTkFrame(self.menu_bar["menu_bar"], bg_color="gray14", fg_color="gray14")
+        sort_menu = ctk.CTkFrame(sf_menu, bg_color="gray14", fg_color="gray14")
+        sort_menu.grid(row=0, column=0, sticky="nsw")
+        filter_menu = ctk.CTkFrame(sf_menu, bg_color="gray14", fg_color="gray14")
+        filter_menu.grid(row=0, column=1, sticky="nsw")
+
+        # Sort Menu (Picker for sort, Toggle for order, Toggle for attribute)
+        sort_menu.columnconfigure(0, weight=1)
+        sort_menu.columnconfigure(1, weight=1)
+        sort_menu.columnconfigure(2, weight=1)
+        sort_menu.rowconfigure(0, weight=1)
+        sort_menu.rowconfigure(1, weight=1)
+        sort_menu.rowconfigure(2, weight=1)
+
+        sort_label = ctk.CTkLabel(sort_menu, text="Sort By", font=("Arial", 20), padx=10, pady=10)
+        sort_label.grid(row=0, column=0, sticky="nsw")
+
+        def sort_picker_callback(choice):
+            if choice == "None":
+                self.sort["sort"] = ""
+            else:
+                self.sort["sort"] = choice
+            self.build_task_list()
+
+        attr_record_list = [attr.name for attr in self.attribute_records]
+        print(attr_record_list)
+
+        sort_picker = ctk.CTkComboBox(sort_menu, font=("Arial", 20), width=150, height=20, values=["None", "id","name", "date","status"], command=sort_picker_callback)
+        sort_picker.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+
+        sort_picker_attr = ctk.CTkComboBox(sort_menu, font=("Arial", 20), width=150, height=20,
+                                           values=["None"] + attr_record_list, command=sort_picker_callback)
+
+        def toggle_sort_attr():
+            self.sort["attr"] = not self.sort["attr"]
+            self.sort["sort"] = ""
+            if self.sort["attr"]:
+                sort_label.configure(text="Sort by Attribute")
+                sort_picker.grid_forget()
+                sort_picker_attr.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+            else:
+                sort_label.configure(text="Sort By")
+                sort_picker_attr.grid_forget()
+                sort_picker.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+            self.build_task_list()
+
+        sort_attr = ctk.CTkButton(sort_menu, text="Sort by Attribute", font=("Arial", 20), width=20, height=20, command=toggle_sort_attr)
+        sort_attr.grid(row=1, column=0, sticky="nsw", pady=10, padx=10)
+
+        order_label = ctk.CTkLabel(sort_menu, text="Order: Asc", font=("Arial", 20), padx=10, pady=10)
+        order_label.grid(row=2, column=0, sticky="nsw")
+
+        def toggle_order():
+            self.sort["order"] = "asc" if self.sort["order"] == "desc" else "desc"
+            order_label.configure(text=f"Order: {self.sort['order'].capitalize()}")
+            self.build_task_list()
+
+        order_button = ctk.CTkButton(sort_menu, text="Toggle Order", font=("Arial", 20), width=20, height=20, command=toggle_order)
+        order_button.grid(row=2, column=1, sticky="nsw", pady=10, padx=10)
+
+        # Filter Menu (Picker for filter, Textbox for value, Toggle for attribute)
+        filter_menu.columnconfigure(0, weight=1)
+        filter_menu.columnconfigure(1, weight=1)
+        filter_menu.columnconfigure(2, weight=1)
+        filter_menu.rowconfigure(0, weight=1)
+        filter_menu.rowconfigure(1, weight=1)
+        filter_menu.rowconfigure(2, weight=1)
+
+        filter_label = ctk.CTkLabel(filter_menu, text="Filter By", font=("Arial", 20), padx=10, pady=10)
+        filter_label.grid(row=0, column=0, sticky="nsw")
+
+        def filter_picker_callback(choice):
+            if choice == "None":
+                self.filter["filter"] = ""
+            else:
+                self.filter["filter"] = choice
+
+        filter_picker = ctk.CTkComboBox(filter_menu, font=("Arial", 20), width=150, height=20, values=["None", "id","name", "date","status"], command=filter_picker_callback)
+        filter_picker.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+
+        filter_picker_attr = ctk.CTkComboBox(filter_menu, font=("Arial", 20), width=150, height=20, values=["None"] + attr_record_list, command=filter_picker_callback)
+
+        def toggle_filter_attr():
+            self.filter["filter"] = ""
+            self.filter["attr"] = not self.filter["attr"]
+            if self.filter["attr"]:
+                filter_label.configure(text="Filter by Attribute")
+                filter_picker.grid_forget()
+                filter_picker_attr.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+            else:
+                filter_label.configure(text="Filter By")
+                filter_picker_attr.grid_forget()
+                filter_picker.grid(row=0, column=1, sticky="nsw", pady=10, padx=10)
+
+        filter_attr = ctk.CTkButton(filter_menu, text="Filter by Attribute", font=("Arial", 20), width=20, height=20, command=toggle_filter_attr)
+        filter_attr.grid(row=1, column=0, sticky="nsw", pady=10, padx=10)
+
+        value_label = ctk.CTkLabel(filter_menu, text="Value", font=("Arial", 20), padx=10, pady=10)
+        value_label.grid(row=2, column=0, sticky="nsw")
+
+        value_entry = ctk.CTkTextbox(filter_menu, font=("Arial", 20), width=150, height=20, fg_color="gray20")
+        value_entry.grid(row=2, column=1, sticky="nsw", pady=10, padx=10)
+
+        def filter_value():
+            self.filter["value"] = value_entry.get("1.0", "end-1c")
+            self.build_task_list()
+
+        value_button = ctk.CTkButton(filter_menu, text="Filter", font=("Arial", 20), width=20, height=20, command=filter_value)
+        value_button.grid(row=2, column=2, sticky="nsw", pady=10, padx=10)
+        return sf_menu
+
     def build_task_list(self):
         """Build the task list on the left side of the screen"""
-        open_tasks = [task for task in self.tasks if task.status == "open"]
-        closed_tasks = [task for task in self.tasks if task.status == "closed"]
-
-        tasks = open_tasks + closed_tasks
+        if self.task_container.winfo_children():
+            for widget in self.task_container.winfo_children():
+                widget.grid_forget()
+        if self.sort["sort"] != "":
+            sorted_ids = self.sort_server.sort_tasks(self.sort["sort"], self.sort["order"], self.sort["attr"])
+        if self.filter["filter"] != "":
+            filtered_ids = self.sort_server.filter_tasks(self.filter["filter"], self.filter["value"], self.filter["attr"])
+        if self.sort["sort"] != "" and self.filter["filter"] != "":
+            sf_tasks = [self.get_task(i) for i in sorted_ids if i in filtered_ids]
+        elif self.sort["sort"] != "":
+            sf_tasks = [self.get_task(i) for i in sorted_ids if self.get_task(i) is not None]
+        elif self.filter["filter"] != "":
+            sf_tasks = [self.get_task(i) for i in filtered_ids if self.get_task(i) is not None]
+        else:
+            sf_tasks = self.tasks
+        if self.sort["sort"] != "status":
+            open_tasks = [task for task in sf_tasks if task.status == "open"]
+            closed_tasks = [task for task in sf_tasks if task.status == "closed"]
+            tasks = open_tasks + closed_tasks
+        else:
+            tasks = sf_tasks
         for i, task in enumerate(tasks):
             task.list_item["button"].grid(row=i, column=0, sticky="nsw", pady=10, padx=10)
-            self.task_container.rowconfigure(i, weight=1, uniform="row")
-        self.log.info(f"Built {len(self.tasks)} tasks in task list")
+            self.task_container.rowconfigure(i, weight=1)
+        self.log.info(f"Built {len(sf_tasks)} tasks in task list")
+
 
     def build_task_details(self):
         """Grid all the task details on the right side of the screen"""
@@ -989,7 +1143,7 @@ class Client(LoggingHandler):
         """Toggle the attribute options for task n
         :param n: Task to toggle
         """
-        task = self.tasks[n]
+        task = self.get_task(n)
         if task.options_open is True:
             task.options_open = False
             task.detail_view["edit"].configure(state="normal")
@@ -1011,9 +1165,11 @@ class Client(LoggingHandler):
         """Fetch all tasks from the server
         :return: True if successful, False if not
         """
-        response = self.connection.get("tasks/all")
+        response = self.server.get("tasks/all")
         if response["code"] == 200:
             for task in response["data"]:
+                if task["status"] == "deleted":
+                    continue
                 attr_list = []
                 for attr in task["attributes"]:
                     attr_list.append(Attribute(self, attr["id"], attr["name"], attr["value"]))
@@ -1031,7 +1187,7 @@ class Client(LoggingHandler):
         """Fetch all attributes from the server
         :return: True if successful, False if not
         """
-        response = self.connection.get("attributes/all")
+        response = self.server.get("attributes/all")
         if response["code"] == 200:
             for attr in response["data"]:
                 new_attribute = AttributeRecord(self, attr["id"], attr["name"])
@@ -1042,10 +1198,24 @@ class Client(LoggingHandler):
             self.log.error(f"Error fetching attributes: {response["code"]} : {response["message"]}")
             return False
 
+
+    def get_task(self, n):
+        """Get the task of id n
+        :param n: ID of the task to get
+        :return: Task with ID n
+        """
+        task = next((task for task in self.tasks if task.id == n), None)
+        if task is not None:
+            return task
+        else:
+            self.log.error(f"Error getting task {n}")
+            return None
+
+
     def add_task(self):
         """TODO:Add new task to the server and UI"""
         new_task = Task(self, len(self.tasks), "New Task", "2024-01-01", [], "Description", "open")
-        response = self.connection.post("tasks/all", {"id": len(self.tasks), "name": "New Task", "date": "2024-01-01", "attributes":[], "description": "Description", "status": "open"})
+        response = self.server.post("tasks/all", {"id": len(self.tasks), "name": "New Task", "date": "2024-01-01", "attributes":[], "description": "Description", "status": "open"})
         if response["code"] != 200:
             self.log.error(f"Error adding new task: {response["code"]} : {response["message"]}")
             return
@@ -1061,7 +1231,7 @@ class Client(LoggingHandler):
         """Edit task n. Toggle editing on and off
         :param n: Task to edit
         """
-        task = self.tasks[n]
+        task = self.get_task(n)
         if task.editing is True:
             task.editing = False
             task.detail_view["name"].configure(state="disabled", fg_color="gray14")
@@ -1099,8 +1269,23 @@ class Client(LoggingHandler):
             task.detail_view["edit"].configure(text="Save")
 
     def delete_task(self, n):
-        """TODO:Delete task from server and UI"""
-        pass
+        """Delete task n from the server and UI
+        :param n: Task to delete
+        :return: True if successful, False if not
+        """
+        task = self.get_task(n)
+        response = self.server.delete(f"tasks/{task.id}", {"id": task.id})
+        if response["code"] == 200:
+
+            task.detail_view["frame"].grid_forget()
+            task.list_item["button"].grid_forget()
+            self.tasks.remove(task)
+            self.log.info(f"Deleted task {n}")
+            return True
+        else:
+            self.log.error(f"Error deleting task {n}: {response["code"]} : {response["message"]}")
+            return False
+
 
     def toggle_active(self, n: int):
         """Toggle the active status of a task. Change checkmark and colors, and task status
@@ -1108,18 +1293,21 @@ class Client(LoggingHandler):
         :return: True if successful, False if not
         """
         #
-        task = self.tasks[n]
+        task = self.get_task(n)
         task.toggle_active()
         if task.status == "open":
             task.list_item["button"].configure(fg_color="#1F6AA5")
             task.list_item["filler"].configure(text="", font=("Arial", 20), fg_color="#1F6AA5")
             task.list_item["name"].configure(fg_color="#1F6AA5")
             task.list_item["attributes"].configure(fg_color="#1F6AA5")
+            task.detail_view["delete"].configure(state="disabled")
         else:
             task.list_item["button"].configure(bg_color="gray14", fg_color="gray20")
             task.list_item["filler"].configure(text="✓", font=("Arial", 20), bg_color="gray20", fg_color="gray20")
             task.list_item["name"].configure(bg_color="gray20", fg_color="gray20")
             task.list_item["attributes"].configure(bg_color="gray20", fg_color="gray20")
+            task.detail_view["delete"].configure(state="normal")
+
         # Rebuild list
         self.build_task_list()
         self.log.info(f"Task {n} toggled to {task.status}")
@@ -1131,7 +1319,7 @@ class Client(LoggingHandler):
         if self.help_page.winfo_ismapped():
             self.help_page.grid_forget()
         self.extra_space.tkraise()
-        self.tasks[n].detail_view["frame"].tkraise()
+        self.get_task(n).detail_view["frame"].tkraise()
 
     def toggle_help(self):
         """TODO:Toggle help page"""
@@ -1140,6 +1328,14 @@ class Client(LoggingHandler):
         else:
             self.help_page.grid(row=1, column=0, columnspan=4, sticky='nsew')
             self.help_page.tkraise()
+
+    def toggle_sf_menu(self):
+        """Toggle the sort and filter menu"""
+        if self.menu_bar["sf_menu"].winfo_ismapped():
+            self.menu_bar["sf_menu"].grid_forget()
+        else:
+            self.menu_bar["sf_menu"].grid(row=1, column=0, sticky="nsw", pady=10, padx=10)
+            self.menu_bar["sf_menu"].tkraise()
 
     def add_attribute(self, n, name, value):
         """TODO:Add attribute to task n"""
@@ -1157,11 +1353,12 @@ class Client(LoggingHandler):
 class Connection(LoggingHandler):
     """The ZMQ Socket Connection to the server"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, port, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
-        self.socket.connect("tcp://localhost:5555")
+        self.socket.connect(f"tcp://localhost:{port}")
+        self.log.info(f"Connection created to service at localhost:{port}")
 
     def get(self, path: str) -> dict:
         """Get data from server
@@ -1213,9 +1410,42 @@ class Connection(LoggingHandler):
 
         return response
 
+    def sort_tasks(self, sort: str, order: str, attr: bool) -> list:
+        """Sort the tasks based on a given attribute
+        :param sort: The attribute to sort by
+        :return: A list of IDs in the sorted order
+        """
+        data = {
+            "type": "sort",
+            "limiter": sort,
+            "order": order,
+            "attr": attr
+        }
+        self.socket.send_string(json.dumps(data))
+        response = json.loads(self.socket.recv_string())
+        return response["data"]
+
+    def filter_tasks(self, filter: str, value: str, attr: bool) -> list:
+        """Filter the tasks based on a given attribute
+        :param filter: The attribute to filter by
+        :return: A list of IDs that match the filter
+        """
+        if filter == "id" and value.isdigit():
+            value = str(int(value) - 1)
+        data = {
+            "type": "filter",
+            "limiter": filter,
+            "filter": value,
+            "attr": attr
+        }
+        self.socket.send_string(json.dumps(data))
+        response = json.loads(self.socket.recv_string())
+        return response["data"]
+
+
 
 # REMOVE
-c = Client(Connection())
+c = Client(Connection(5555), Connection(6666))
 # t = Task(c, 1, "Task 1", "2021-12-31", "This is a task", [], "open")
 # attrib = Attribute(c, 1, "Attribute 1", "Value 1", t)
 # t.attributes.append(attrib)
@@ -1223,11 +1453,11 @@ c = Client(Connection())
 # print(task.attributes)
 # attribute.remove()
 # print(task.attributes)
-
-context = zmq.Context()
-print("Connecting to task server…")
-socket = context.socket(zmq.REQ)
-socket.connect("tcp://localhost:5555")
+#
+# context = zmq.Context()
+# print("Connecting to task server…")
+# socket = context.socket(zmq.REQ)
+# socket.connect("tcp://localhost:5555")
 
 # UI Setup and Shape
 # root = ctk.CTk()
@@ -1424,8 +1654,8 @@ socket.connect("tcp://localhost:5555")
 # help_info.grid(row=3, column=0, sticky="nsw", padx=10)
 
 # Create a dictionary to store the state of each textbox
-
-textbox_states = {}
+#
+# textbox_states = {}
 
 
 # def edit_task(n):
@@ -1784,28 +2014,28 @@ textbox_states = {}
 #     edit_task(len(tasks) - 1)
 
 
-def open_help():
-    help_page.tkraise()
-
-
-def change_task(n):
-    # Bring the frame of the selected task detail view to the top
-    extra_space.tkraise()
-    task_detail_frames[n][0].tkraise()
-
-
-task_buttons = []
-
-
-def build_task_list():
-    print("Building Task List")
-    for button in task_buttons:
-        button.destroy()
-    task_buttons.clear()
-    # Create Tasks on left side
-    tasks = fetch_tasks()
-    button_queue_disabled = []
-    button_queue = []
+# def open_help():
+#     help_page.tkraise()
+#
+#
+# def change_task(n):
+#     # Bring the frame of the selected task detail view to the top
+#     extra_space.tkraise()
+#     task_detail_frames[n][0].tkraise()
+#
+#
+# task_buttons = []
+#
+#
+# def build_task_list():
+#     print("Building Task List")
+#     for button in task_buttons:
+#         button.destroy()
+#     task_buttons.clear()
+#     # Create Tasks on left side
+#     tasks = fetch_tasks()
+#     button_queue_disabled = []
+#     button_queue = []
     # for i in range(len(tasks)):
 
     # button = ctk.CTkButton(left_final_window, command=lambda index=i: change_task(index), text="", width=400,
@@ -1828,13 +2058,13 @@ def build_task_list():
     # attributes.grid(row=2, column=0, sticky="nsw")
     # attributes.bind("<Button-1>", lambda event, index=i: change_task(index))
     # task_buttons.append(button)
-    i = 0
-    for button in button_queue:
-        button.grid(row=i, column=0, sticky="nsew", pady=1)
-        i += 1
-    for button in button_queue_disabled:
-        button.grid(row=i, column=0, sticky="nsew", pady=1)
-        i += 1
+    # i = 0
+    # for button in button_queue:
+    #     button.grid(row=i, column=0, sticky="nsew", pady=1)
+    #     i += 1
+    # for button in button_queue_disabled:
+    #     button.grid(row=i, column=0, sticky="nsew", pady=1)
+    #     i += 1
 
 
 # build_task_list()

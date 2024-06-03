@@ -7,6 +7,11 @@
             "description": "Description for task 1",
             "attributes": [
                 {
+                    "id": 0,
+                    "name": "Priority",
+                    "value": "4"
+                },
+                {
                     "id": 1,
                     "name": "Class",
                     "value": "value"
@@ -26,59 +31,32 @@
         },
         {
             "id": 1,
-            "name": "Milestone 3",
+            "name": "Milestone 4",
             "date": "06/03/2024",
             "description": "Description for task 2",
             "attributes": [
+                {
+                    "id": 0,
+                    "name": "Priority",
+                    "value": "1"
+                },
                 {
                     "id": 8,
                     "name": "1",
                     "value": "1"
                 }
             ],
-            "status": "open"
+            "status": "closed"
         },
         {
             "id": 2,
-            "name": "Milestone 4",
-            "date": "06/03/2024",
-            "description": "Description for task 3",
             "attributes": [],
-            "status": "closed"
+            "status": "deleted"
         },
         {
             "id": 3,
-            "name": "Milestone 5",
-            "date": "06/03/2024",
-            "description": "Description for task 4",
-            "attributes": [
-                {
-                    "id": 1,
-                    "name": "Class",
-                    "value": "value"
-                },
-                {
-                    "id": 3,
-                    "name": "Test",
-                    "value": "value"
-                },
-                {
-                    "id": 6,
-                    "name": "New Atr",
-                    "value": "New Val"
-                },
-                {
-                    "id": 7,
-                    "name": "name",
-                    "value": "value"
-                },
-                {
-                    "id": 9,
-                    "name": "2",
-                    "value": "2"
-                }
-            ],
-            "status": "closed"
+            "attributes": [],
+            "status": "deleted"
         },
         {
             "id": 4,
@@ -92,32 +70,28 @@
                     "value": "3"
                 }
             ],
-            "status": "open"
-        },
-        {
-            "id": 5,
-            "name": "Milestone 7",
-            "date": "06/03/2024",
-            "description": "Description for task 6",
-            "attributes": [
-                {
-                    "id": 0,
-                    "name": "Priority",
-                    "value": "value"
-                }
-            ],
             "status": "closed"
         },
         {
+            "id": 5,
+            "attributes": [],
+            "status": "deleted"
+        },
+        {
             "id": 6,
-            "name": "Milestone 8",
-            "date": "06/03/2024",
+            "name": "Milestone 100",
+            "date": "06/10/2024",
             "description": "Description for task 7",
             "attributes": [
                 {
                     "id": 0,
                     "name": "Priority",
-                    "value": "value"
+                    "value": "5"
+                },
+                {
+                    "id": 1,
+                    "name": "Class",
+                    "value": "Software Engineering"
                 },
                 {
                     "id": 2,
@@ -131,9 +105,20 @@
             "id": 7,
             "name": "Newest Name",
             "date": "2024-01-01",
-            "attributes": [],
+            "attributes": [
+                {
+                    "id": 0,
+                    "name": "Priority",
+                    "value": "10"
+                }
+            ],
             "description": "Description",
             "status": "open"
+        },
+        {
+            "id": 8,
+            "attributes": [],
+            "status": "deleted"
         }
     ],
     "attributes": [

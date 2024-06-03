@@ -38,12 +38,14 @@ while True:
                             response["data"] = server_data["tasks"][int(spec)]
                         case _:
                             response["code"] = 400
+                    response["data"] = list(filter(lambda i: i["status"] != "deleted", server_data["tasks"]))
                 case "attributes":
                     match spec:
                         case "all":
                             response["data"] = server_data["attributes"]
                         case spec if spec.isdigit():
                             response["data"] = server_data["attributes"][int(spec)]
+
         case "post":
             print(f"post/{location}/{spec}/{key}")
             match location:
@@ -100,7 +102,7 @@ while True:
                                     server_data["tasks"][task_index]["attributes"] = res
                                 case "":
                                     task_index = int(spec)
-                                    del server_data["tasks"][task_index]
+                                    server_data["tasks"][task_index] = {"id": server_data["tasks"][task_index]["id"], "attributes": [], "status": "deleted"}
                         case _:
                             response["code"] = 400
                 case "attributes":
@@ -124,9 +126,11 @@ while True:
             response["message"] = "Not Found"
         case 405:
             response["message"] = "Method Not Allowed"
+
     server_data["tasks"] = sorted(server_data["tasks"], key=lambda i: i["id"])
     for task in server_data["tasks"]:
-        task["attributes"] = sorted(task["attributes"], key=lambda i: i["id"])
+        if task["attributes"]:
+            task["attributes"] = sorted(task["attributes"], key=lambda i: i["id"])
     server_data["attributes"] = sorted(server_data["attributes"], key=lambda i: i["id"])
     file = open("data.json", "w")
     json.dump(server_data, file, indent=4)
