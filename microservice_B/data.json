@@ -3,207 +3,127 @@
     "tasks": [
         {
             "id": 0,
-            "name": "Milestone 6",
+            "name": "Milestone 3",
             "date": "06/03/2024",
             "parent": null,
-            "children": [],
-            "description": "Description for task 5",
-            "attributes": [
-                {
-                    "id": 9,
-                    "name": "3",
-                    "value": "3"
-                }
-            ],
-            "status": "closed"
-        },
-        {
-            "id": 1,
-            "name": "Milestone 100",
-            "date": "06/10/2024",
-            "parent": null,
             "children": [
-                7,
-                9
+                3
             ],
-            "description": "Description for task 7",
             "attributes": [
                 {
                     "id": 0,
-                    "name": "Priority",
-                    "value": "5"
+                    "name": "Class",
+                    "value": "Soft Eng"
                 },
                 {
                     "id": 1,
-                    "name": "Class",
-                    "value": "Software Engineering"
+                    "name": "Priority",
+                    "value": "XL"
                 },
                 {
                     "id": 2,
-                    "name": "Size",
-                    "value": "value"
+                    "name": "Estimate",
+                    "value": "40"
                 }
             ],
-            "status": "closed"
+            "description": "Finish the Project, and Implement all microservices.",
+            "status": "open"
         },
         {
-            "id": 2,
-            "name": "Newest Name",
+            "id": 1,
+            "name": "Project 6",
             "date": "2024-01-01",
             "parent": null,
-            "children": [
-                8
-            ],
+            "children": [],
             "attributes": [
                 {
                     "id": 0,
-                    "name": "Priority",
-                    "value": "10"
+                    "name": "Class",
+                    "value": "Assembly"
                 }
             ],
-            "description": "Description",
+            "description": "Work with Macros in Assembly",
+            "status": "open"
+        },
+        {
+            "id": 2,
+            "name": "Sprint Retrospective",
+            "date": "2024-01-01",
+            "parent": null,
+            "children": [],
+            "attributes": [
+                {
+                    "id": 0,
+                    "name": "Class",
+                    "value": "Soft Eng"
+                }
+            ],
+            "description": "Reflect on how the sprint went, and why it went the way it did.",
             "status": "open"
         },
         {
             "id": 3,
-            "name": "Task 4",
-            "parent": null,
-            "children": [],
+            "name": "Project Showcase",
             "date": "2024-01-01",
-            "attributes": [],
-            "description": "Description",
+            "parent": 0,
+            "children": [],
+            "attributes": [
+                {
+                    "id": 0,
+                    "name": "Class",
+                    "value": "Soft Eng"
+                },
+                {
+                    "id": 1,
+                    "name": "Estimate",
+                    "value": "3"
+                }
+            ],
+            "description": "Post video to discussion, and reply to 2 others",
             "status": "open"
         },
         {
             "id": 4,
-            "name": "Task 5",
+            "name": "New Task",
+            "date": "01/01/2024",
             "parent": null,
-            "children": [
-                5,
-                11
+            "children": [],
+            "attributes": [
+                {
+                    "id": 3,
+                    "name": "Testing ",
+                    "value": "Value!"
+                },
+                {
+                    "id": 4,
+                    "name": "Test2",
+                    "value": "Another"
+                }
             ],
-            "date": "2024-01-01",
-            "attributes": [],
             "description": "Description",
             "status": "open"
-        },
-        {
-            "id": 5,
-            "name": "Task 6 !",
-            "date": "2024-01-01",
-            "parent": 4,
-            "children": [],
-            "attributes": [],
-            "description": "Description",
-            "status": "open"
-        },
-        {
-            "id": 6,
-            "name": "New Task",
-            "date": "2024-01-01",
-            "parent": null,
-            "children": [
-                10
-            ],
-            "attributes": [],
-            "description": "Description",
-            "status": "open"
-        },
-        {
-            "id": 7,
-            "name": "Task 8!",
-            "date": "2024-01-01",
-            "parent": 1,
-            "children": [],
-            "attributes": [],
-            "description": "Description",
-            "status": "open"
-        },
-        {
-            "id": 8,
-            "name": "New Task",
-            "date": "2024-01-01",
-            "parent": 2,
-            "children": [],
-            "attributes": [],
-            "description": "Description",
-            "status": "open"
-        },
-        {
-            "id": 9,
-            "name": "New Task",
-            "date": "2024-01-01",
-            "parent": 1,
-            "children": [],
-            "attributes": [],
-            "description": "Description",
-            "status": "open"
-        },
-        {
-            "id": 10,
-            "name": "New Task",
-            "date": "2024-01-01",
-            "parent": 6,
-            "children": [],
-            "attributes": [],
-            "description": "Description",
-            "status": "open"
-        },
-        {
-            "id": 11,
-            "name": "New Task",
-            "date": "2024-01-01",
-            "parent": 4,
-            "children": [],
-            "attributes": [],
-            "description": "Description",
-            "status": "closed"
         }
     ],
     "attributes": [
         {
             "id": 0,
-            "name": "Priority"
-        },
-        {
-            "id": 1,
             "name": "Class"
         },
         {
+            "id": 1,
+            "name": "Priority"
+        },
+        {
             "id": 2,
-            "name": "Size"
+            "name": "Estimate"
         },
         {
             "id": 3,
-            "name": "Test"
+            "name": "Testing "
         },
         {
             "id": 4,
-            "name": "New Attribute"
-        },
-        {
-            "id": 5,
-            "name": "Time"
-        },
-        {
-            "id": 6,
-            "name": "New Atr"
-        },
-        {
-            "id": 7,
-            "name": "name"
-        },
-        {
-            "id": 8,
-            "name": "1"
-        },
-        {
-            "id": 9,
-            "name": "2"
-        },
-        {
-            "id": 9,
-            "name": "3"
+            "name": "Test2"
         }
     ]
 }

@@ -242,7 +242,7 @@ class Task(LoggingHandler):
     """TODO TASK DOCSTRING"""
 
     def __init__(self, client, theme, task_id, name, date, attributes, description, status, parent=None, children=None,
-                 *args, **kwargs):        # add_button.bind("<Button-1>", lambda: task.add_attribute(self.id, attr_value.get("1.0", "end-1c")))
+                 *args, **kwargs):
         super().__init__(*args, **kwargs)
         if children is None:
             children = []
@@ -307,9 +307,18 @@ class Task(LoggingHandler):
                 attr.remove()
                 del attr
             self.client.tasks.remove(self)
+            if self.parent is not None:
+                self.parent.children = [child for child in self.parent.children if child.id != self.id]
+                id_list = [child.id for child in self.parent.children]
+                response = self.client.server.put(f"tasks/{self.parent.id}", {"children": id_list})
+                if response["code"] != 200:
+                    self.log.error(f"Error updating parent task: {response["code"]} : {response["message"]}")
 
             for child in self.children:
                 if not isinstance(child, int):
+                    response = self.client.server.put(f"tasks/{child.id}", {"parent": None})
+                    if response["code"] != 200:
+                        self.log.error(f"Error updating child task: {response["code"]} : {response["message"]}")
                     child.parent = None
             self.log.debug(f"Task deleted: {self}")
             return True
@@ -453,40 +462,43 @@ class Task(LoggingHandler):
         date.configure(state="disabled")
         date.grid(row=1, column=0, columnspan=3, sticky="nsw", padx=15, pady=10)
 
+        max_j = 2
         if self.parent is None:
             add_child = ctk.CTkButton(task_detail_frame, text="Add Child",
                                       command=lambda: self.client.add_child(self.id),
                                       font=("Arial", 30), width=50, bg_color=self.theme["darker"], fg_color=self.theme["accent"], text_color=self.theme["font"])
-            add_child.grid(row=1, column=1, sticky="nsw", pady=10)
+            add_child.grid(row=max_j, column=1, sticky="nsw", pady=10, padx=15)
+            max_j += 1
         else:
             if not isinstance(self.parent, int):
                 parent_details = ctk.CTkButton(task_detail_frame,
                                                text=f'Parent: ID:{self.parent.id + 1} - {self.parent.name}',
                                                font=("Arial", 30),
                                                command=lambda: self.client.change_task(self.parent.id), fg_color=self.theme["accent"], text_color=self.theme["font"])
-                parent_details.grid(row=2, column=0, sticky="nsw", pady=10)
+                parent_details.grid(row=max_j, column=0, sticky="nsw", pady=10, padx=15)
+                max_j += 1
 
         if len(self.children) > 0:
             if not isinstance(self.children[0], int):
                 child_details = ctk.CTkLabel(task_detail_frame,
                                              text=f'Children:\n{"\n ".join([f"ID:{child.id} - {child.name}" for child in self.children])}',
                                              font=("Arial", 30), padx=15, text_color=self.theme["font"])
-                child_details.grid(row=2, column=0, sticky="nsw", pady=10)
+                child_details.grid(row=max_j, column=0, sticky="nsw", pady=10)
+                max_j += 1
 
         # Attribute Label
         attribute_label = ctk.CTkButton(task_detail_frame, text="Attributes", font=("Arial", 30),
                                         command=lambda: self.client.toggle_attribute_options(self.id),
-                                        state="disabled", bg_color=self.theme["darker"],fg_color=self.theme["darker"], text_color=self.theme["font"],
+                                        state="disabled", bg_color=self.theme["darker"], fg_color=self.theme["darker"], text_color=self.theme["font"],
                                         text_color_disabled=self.theme["font"])
-        attribute_label.grid(row=3, column=0, columnspan=3, sticky="nsw", pady=10, padx=15)
+        attribute_label.grid(row=max_j, column=0, columnspan=3, sticky="nsw", pady=10, padx=15)
         # Attributes
-        max_j = 7
+        max_j += 5
         for attr in self.attributes:
-            if attr.label is None:
-                attr.label = attr.build_label(task_detail_frame)
+            attr.label = attr.build_label(task_detail_frame)
             attr.label.grid(row=max_j, column=0, columnspan=3, sticky="nsw", pady=10, padx=10)
             max_j += 1
-        attribute_row = max_j
+        attribute_row = max_j+1
         max_j += 50  # This gives space for new attributes. It feels a bit messy, but right now its the best way to do it.
         # Description Label
         description_label = ctk.CTkLabel(task_detail_frame, text="Description", font=("Arial", 30), padx=15, text_color=self.theme["font"])
@@ -512,6 +524,7 @@ class Task(LoggingHandler):
         self.log.debug(f"Task detail view built: {task_detail_frame}")
         return {
             "attr_row": attribute_row,
+            "attr_label_row": attribute_row - len(self.attributes) - 1,
             "name": task_name,
             "date": date,
             "description": description,
@@ -623,8 +636,10 @@ class Task(LoggingHandler):
         :param value: Value to be used
         :return: Attribute if successful, None if not
         """
+        self.client.attribute_records = []
+        self.client.fetch_attributes()
         attr_id = len(self.client.attribute_records)
-        new_attribute = Attribute(self.client, attr_id, name, value, self)
+        new_attribute = Attribute(self.client, self.theme, attr_id, name, value, self)
         # Add attribute to main list, and then to task.
         attr_response = self.client.server.post(f"attributes", {"id": attr_id, "name": name})
         task_response = self.client.server.post(f"tasks/{self.id}/attributes",
@@ -666,7 +681,7 @@ class Task(LoggingHandler):
         response = self.client.server.post(f"tasks/{self.id}/attributes", {"id": attr_id, "name": name, "value": value})
         if response["code"] == 200:
             # Create new attribute
-            new_attribute = Attribute(self.client, attr_id, name, value, self)
+            new_attribute = Attribute(self.client, self.theme, attr_id, name, value, self)
             self.attributes.append(new_attribute)
 
             # Add to current options
@@ -776,7 +791,7 @@ def stop_scroll(event, widget):
 class Client(LoggingHandler):
     """Client for the To-Do List Application. Inherits from LoggingHandler to allow a logger per class"""
 
-    def __init__(self, server, sort_server, theme_server, *args, **kwargs):
+    def __init__(self, server, sort_server, theme_server, export_server, *args, **kwargs):
         """
         :param connection:
         :param args:
@@ -786,6 +801,7 @@ class Client(LoggingHandler):
         self.server: Connection = server
         self.sort_server: Connection = sort_server
         self.theme_server: Connection = theme_server
+        self.export_server: Connection = export_server
         self.theme = self.get_theme()
         self.root = self.build_root(ctk.CTk())
         self.tasks: list[Task] = []
@@ -798,6 +814,14 @@ class Client(LoggingHandler):
         self.help_page = None
         self.log.info("Client created")
         self.build_initial_ui()
+
+    def export_tasks(self):
+        self.export_server.socket.send_string("export")
+        response = json.loads(self.export_server.socket.recv_string())
+        if response["code"] == 200:
+            self.log.info("Tasks exported")
+        else:
+            self.log.error(f"Error exporting tasks: {response["code"]} : {response["message"]}")
 
     def get_theme(self):
         """Get the theme from the server"""
@@ -838,12 +862,16 @@ class Client(LoggingHandler):
         self.fetch_tasks()
         self.assign_children()
         for task in self.tasks:
-            if task.parent is not None:
+            if task.parent is not None or len(task.children) > 0:
+                task.detail_view["frame"].grid_forget()
                 task.detail_view = task.build_detail_view(self.detail_container)
                 task.list_item = task.build_list_item(self.task_container)
-            if len(task.children) > 0:
-                task.detail_view = task.build_detail_view(self.detail_container)
-                task.list_item = task.build_list_item(self.task_container)
+
+            for child in task.options_frame.winfo_children():
+                child.grid_forget()
+            task.attribute_options = task.build_attribute_options(task.options_frame)
+
+
         self.build_task_list()
         self.build_task_details()
         self.help_page = self.build_help_page()
@@ -889,10 +917,16 @@ class Client(LoggingHandler):
                                         command=lambda: self.change_theme(theme_picker.get().lower()), fg_color=self.theme["accent"], bg_color="gray14", text_color=self.theme["font_alt"])
         theme_button.grid(row=0, column=2, sticky="nsw")
 
+
+        # Export Button
+        export_button = ctk.CTkButton(menu_bar, text="Export", font=("Arial", 20), width=20, height=20,
+                                      command=self.export_tasks, fg_color=self.theme["accent"], bg_color="gray14", text_color=self.theme["font_alt"])
+        export_button.grid(row=0, column=4, sticky="nsw", pady=10, padx=10)
+
         # Help Button
         help_button = ctk.CTkButton(menu_bar, text="What's New? / Help", font=("Arial", 20), width=20, height=20,
                                     command=self.toggle_help, fg_color=self.theme["accent"], bg_color="gray14", text_color=self.theme["font_alt"])
-        help_button.grid(row=0, column=4, sticky="nsew", pady=10, padx=10)
+        help_button.grid(row=0, column=5, sticky="nsew", pady=10, padx=10)
 
         # Config menu bar grid
         menu_bar.columnconfigure(0, weight=1)
@@ -900,6 +934,7 @@ class Client(LoggingHandler):
         menu_bar.columnconfigure(2, weight=4)
         menu_bar.columnconfigure(3, weight=4)
         menu_bar.columnconfigure(4, weight=1)
+        menu_bar.columnconfigure(5, weight=1)
 
         return {
             "menu_bar": menu_bar,
@@ -1259,7 +1294,7 @@ class Client(LoggingHandler):
             # Disable closing editor so that it won't be saved while open
             task.detail_view["edit"].configure(state="disabled")
             # Show the attribute options
-            task.attribute_options["frame"].grid(row=3, column=0, columnspan=3, rowspan=3, sticky="nsw")
+            task.attribute_options["frame"].grid(row=6, column=0, columnspan=3, rowspan=3, sticky="nsw")
             task.attribute_options["frame"].tkraise()
 
     # Updating Data
@@ -1329,7 +1364,7 @@ class Client(LoggingHandler):
         """
         new_task = Task(self, self.theme, len(self.tasks), "New Task", "2024-01-01", [], "Description", "open")
         response = self.server.post("tasks/all",
-                                    {"id": len(self.tasks), "name": "New Task", "date": "2024-01-01", "parent": None,
+                                    {"id": len(self.tasks), "name": "New Task", "date": "01/01/2024", "parent": None,
                                      "children": [], "attributes": [], "description": "Description", "status": "open"})
         if response["code"] != 200:
             self.log.error(f"Error adding new task: {response["code"]} : {response["message"]}")
@@ -1390,18 +1425,11 @@ class Client(LoggingHandler):
         :return: True if successful, False if not
         """
         task = self.get_task(n)
-        response = self.server.delete(f"tasks/{task.id}", {"id": task.id})
-        if response["code"] == 200:
+        task.delete()
 
-            task.detail_view["frame"].grid_forget()
-            task.list_item["button"].grid_forget()
-            self.tasks.remove(task)
-            self.log.info(f"Deleted task {n}")
-            return True
-        else:
-            self.log.error(f"Error deleting task {n}: {response["code"]} : {response["message"]}")
-            return False
-
+        task.detail_view["frame"].grid_forget()
+        task.list_item["button"].grid_forget()
+        self.log.info(f"Deleted task {n}")
     def toggle_active(self, n: int):
         """Toggle the active status of a task. Change checkmark and colors, and task status
         :param n: Task to toggle
@@ -1578,4 +1606,4 @@ class Connection(LoggingHandler):
         return response[type]
 
 
-c = Client(Connection(5555), Connection(6666), Connection(3000))
+c = Client(Connection(5555), Connection(6666), Connection(3000), Connection(7777))

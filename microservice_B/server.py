@@ -1,4 +1,3 @@
-import time
 import zmq
 import json
 
@@ -105,7 +104,8 @@ while True:
                                     for task in range(task_index, len(server_data["tasks"])):
                                         server_data["tasks"][task]["id"] -= 1
                                         # Update children tasks
-                                        server_data["tasks"][task]["parent"] -= 1
+                                        if server_data["tasks"][task]["parent"]:
+                                            server_data["tasks"][task]["parent"] -= 1
                                     for task in server_data["tasks"]:
                                         if len(task["children"]) > 0:
                                             for child in task["children"]:
