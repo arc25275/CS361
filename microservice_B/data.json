@@ -1,0 +1,129 @@
+{
+    "theme": "default",
+    "tasks": [
+        {
+            "id": 0,
+            "name": "Milestone 3",
+            "date": "06/03/2024",
+            "parent": null,
+            "children": [
+                3
+            ],
+            "attributes": [
+                {
+                    "id": 0,
+                    "name": "Class",
+                    "value": "Soft Eng"
+                },
+                {
+                    "id": 1,
+                    "name": "Priority",
+                    "value": "XL"
+                },
+                {
+                    "id": 2,
+                    "name": "Estimate",
+                    "value": "40"
+                }
+            ],
+            "description": "Finish the Project, and Implement all microservices.",
+            "status": "open"
+        },
+        {
+            "id": 1,
+            "name": "Project 6",
+            "date": "2024-01-01",
+            "parent": null,
+            "children": [],
+            "attributes": [
+                {
+                    "id": 0,
+                    "name": "Class",
+                    "value": "Assembly"
+                }
+            ],
+            "description": "Work with Macros in Assembly",
+            "status": "open"
+        },
+        {
+            "id": 2,
+            "name": "Sprint Retrospective",
+            "date": "2024-01-01",
+            "parent": null,
+            "children": [],
+            "attributes": [
+                {
+                    "id": 0,
+                    "name": "Class",
+                    "value": "Soft Eng"
+                }
+            ],
+            "description": "Reflect on how the sprint went, and why it went the way it did.",
+            "status": "open"
+        },
+        {
+            "id": 3,
+            "name": "Project Showcase",
+            "date": "2024-01-01",
+            "parent": 0,
+            "children": [],
+            "attributes": [
+                {
+                    "id": 0,
+                    "name": "Class",
+                    "value": "Soft Eng"
+                },
+                {
+                    "id": 1,
+                    "name": "Estimate",
+                    "value": "3"
+                }
+            ],
+            "description": "Post video to discussion, and reply to 2 others",
+            "status": "open"
+        },
+        {
+            "id": 4,
+            "name": "New Task",
+            "date": "01/01/2024",
+            "parent": null,
+            "children": [],
+            "attributes": [
+                {
+                    "id": 3,
+                    "name": "Testing ",
+                    "value": "Value!"
+                },
+                {
+                    "id": 4,
+                    "name": "Test2",
+                    "value": "Another"
+                }
+            ],
+            "description": "Description",
+            "status": "open"
+        }
+    ],
+    "attributes": [
+        {
+            "id": 0,
+            "name": "Class"
+        },
+        {
+            "id": 1,
+            "name": "Priority"
+        },
+        {
+            "id": 2,
+            "name": "Estimate"
+        },
+        {
+            "id": 3,
+            "name": "Testing "
+        },
+        {
+            "id": 4,
+            "name": "Test2"
+        }
+    ]
+}
